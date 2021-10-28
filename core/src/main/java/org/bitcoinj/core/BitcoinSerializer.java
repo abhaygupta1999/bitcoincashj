@@ -75,6 +75,7 @@ public class BitcoinSerializer extends MessageSerializer {
         names.put(GetUTXOsMessage.class, "getutxos");
         names.put(UTXOsMessage.class, "utxos");
         names.put(SendHeadersMessage.class, "sendheaders");
+        names.put(DSProofMessage.class, "dsproof-beta");
     }
 
     /**
@@ -257,6 +258,8 @@ public class BitcoinSerializer extends MessageSerializer {
             return new SendHeadersMessage(params, payloadBytes);
         } else if (command.equals("feefilter")) {
             return new FeeFilterMessage(params, payloadBytes);
+        } else if(command.equals("dsproof-beta")) {
+            return new DSProofMessage(params, payloadBytes);
         } else {
             log.warn("No support for deserializing message with name {}", command);
             return new UnknownMessage(params, command, payloadBytes);

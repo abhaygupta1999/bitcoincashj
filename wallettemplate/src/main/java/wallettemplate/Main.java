@@ -156,34 +156,6 @@ public class Main extends Application {
                 .setUserAgent(APP_NAME, "1.0");
         if (seed != null)
             bitcoin.restoreWalletFromSeed(seed);
-
-        new Thread() {
-            @Override
-            public void run() {
-                while(true) {
-                    if(bitcoin.isRunning()) {
-                        //System.out.println(bitcoin.wallet().getRecentTransactions(0, false));
-                        bitcoin.recalculateSlpUtxos();
-                        bitcoin.recalculateNftUtxos();
-
-                        System.out.println("SLPs::");
-                        for(SlpTokenBalance slpTokenBalance : bitcoin.getSlpBalances()) {
-                            System.out.println(bitcoin.getSlpToken(slpTokenBalance.getTokenId()).toString() + ", " + slpTokenBalance.getBalance());
-                        }
-
-                        System.out.println("NFTs::");
-                        for(SlpTokenBalance nftSlpTokenBalance : bitcoin.getNftBalances()) {
-                            System.out.println(bitcoin.getNft(nftSlpTokenBalance.getTokenId()).toString() + ", " + nftSlpTokenBalance.getBalance());
-                        }
-                        try {
-                            Thread.sleep(5000L);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            }
-        }.start();
     }
 
     private Node stopClickPane = new Pane();

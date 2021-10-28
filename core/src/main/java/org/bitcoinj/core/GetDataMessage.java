@@ -60,6 +60,10 @@ public class GetDataMessage extends ListMessage {
         addItem(new InventoryItem(InventoryItem.Type.FILTERED_BLOCK, hash));
     }
 
+    public void addDsProof(Sha256Hash hash) {
+        addItem(new InventoryItem(InventoryItem.Type.DSPROOF, hash));
+    }
+
     public Sha256Hash getHashOf(int i) {
         return getItems().get(i).hash;
     }
