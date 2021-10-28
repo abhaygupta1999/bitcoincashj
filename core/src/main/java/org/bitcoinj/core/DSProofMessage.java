@@ -39,7 +39,6 @@ public class DSProofMessage extends EmptyMessage {
     // this is needed by the BitcoinSerializer
     public DSProofMessage(NetworkParameters params, byte[] payload) {
         this.id = Sha256Hash.twiceOf(payload);
-        System.out.println("DSPROOF_ID:: " + this.id.toString());
         this.txPrevHash = Arrays.copyOfRange(payload, 0, 32);
         this.txPrevIndex = Arrays.copyOfRange(payload, 32, 36);
     }

@@ -769,12 +769,7 @@ public class Peer extends PeerSocketHandler {
     }
 
     protected void processDsProof(DSProofMessage dsProof) {
-        try {
-            Sha256Hash hash = Sha256Hash.ZERO_HASH;
-            pendingDsProofDownloads.remove(hash);
-        } catch(Exception e) {
-            log.error("Error processing DS proof " + dsProof);
-        }
+        // TODO at a later date
     }
 
     protected void processTransaction(final Transaction tx) throws VerificationException {
@@ -1205,11 +1200,9 @@ public class Peer extends PeerSocketHandler {
                     transactions.add(item);
                     break;
                 case BLOCK:
-                    System.out.println("BLOCK INV RECEIVED");
                     blocks.add(item);
                     break;
                 case DSPROOF:
-                    System.out.println("DS PROOF INV RECEIVED");
                     dsproofs.add(item);
                     break;
                 default:
