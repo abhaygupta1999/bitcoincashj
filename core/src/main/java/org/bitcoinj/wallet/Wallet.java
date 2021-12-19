@@ -4387,7 +4387,6 @@ public class Wallet extends BaseTaggableObject
             } else {
                 // We're being asked to empty the wallet. What this means is ensuring "tx" has only a single output
                 // of the total value we can currently spend as determined by the selector, and then subtracting the fee.
-                checkState(req.tx.getOutputs().size() == 1, "Empty wallet TX must have a single output only.");
                 CoinSelector selector = req.coinSelector == null ? coinSelector : req.coinSelector;
                 bestCoinSelection = selector.select(params.getMaxMoney(), candidates);
                 candidates = null;  // Selector took ownership and might have changed candidates. Don't access again.
