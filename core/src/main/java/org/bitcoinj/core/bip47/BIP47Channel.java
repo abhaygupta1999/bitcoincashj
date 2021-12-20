@@ -87,9 +87,6 @@ public class BIP47Channel {
         for (int i = 0; i < LOOKAHEAD; i++) {
             ECKey key = getReceiveAddress(wallet, paymentCode, i).getReceiveECKey();
             Address address = wallet.getAddressOfKey(key);
-
-            System.out.println("New address generated");
-            System.out.println(address.toString());
             wallet.importKey(key);
             incomingAddresses.add(i, new BIP47Address(address.toString(), i));
         }
@@ -101,9 +98,6 @@ public class BIP47Channel {
         for (int i = 0; i < LOOKAHEAD; i++) {
             ECKey key = getReceiveAddress(wallet, paymentCode, i).getReceiveECKey();
             Address address = wallet.getAddressOfKey(key);
-
-            System.out.println("New address generated");
-            System.out.println(address.toString());
             wallet.importKey(key);
             incomingAddresses.add(i, new BIP47Address(address.toString(), i));
         }

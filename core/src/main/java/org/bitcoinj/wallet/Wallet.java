@@ -4390,7 +4390,7 @@ public class Wallet extends BaseTaggableObject
                 CoinSelector selector = req.coinSelector == null ? coinSelector : req.coinSelector;
                 bestCoinSelection = selector.select(params.getMaxMoney(), candidates);
                 candidates = null;  // Selector took ownership and might have changed candidates. Don't access again.
-                req.tx.getOutput(0).setValue(bestCoinSelection.valueGathered);
+                req.tx.getOutput(req.emptyWalletOutput).setValue(bestCoinSelection.valueGathered);
                 log.info("  emptying {}", bestCoinSelection.valueGathered.toFriendlyString());
             }
 
@@ -4398,7 +4398,7 @@ public class Wallet extends BaseTaggableObject
                 req.tx.addInput(output);
 
             if (req.emptyWallet) {
-                if (!adjustOutputDownwardsForFee(req.tx, bestCoinSelection, req.feePerKb, req.ensureMinRequiredFee))
+                if (!adjustOutputDownwardsForFee(req.tx, bestCoinSelection, req.feePerKb, req.ensureMinRequiredFee, req.emptyWalletOutput))
                     throw new CouldNotAdjustDownwards();
             }
 
@@ -4508,12 +4508,12 @@ public class Wallet extends BaseTaggableObject
     * If ensureMinRequiredFee is true, feePerKb is set to at least {@link Transaction#REFERENCE_DEFAULT_MIN_TX_FEE}.
      */
     private boolean adjustOutputDownwardsForFee(Transaction tx, CoinSelection coinSelection, Coin feePerKb,
-                                                boolean ensureMinRequiredFee) {
+                                                boolean ensureMinRequiredFee, int emptyWalletOutput) {
         if (ensureMinRequiredFee && feePerKb.compareTo(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE) < 0)
             feePerKb = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE;
         final int size = tx.getMessageSize() + estimateBytesForSigning(coinSelection);
         Coin fee = feePerKb.multiply(size).divide(1000);
-        TransactionOutput output = tx.getOutput(0);
+        TransactionOutput output = tx.getOutput(emptyWalletOutput);
         output.setValue(output.getValue().subtract(fee));
         return !output.isDust();
     }
@@ -5747,7 +5747,7 @@ public class Wallet extends BaseTaggableObject
             }
             // When not signing, don't waste addresses.
             rekeyTx.addOutput(toMove.valueGathered, sign ? freshReceiveAddress() : currentReceiveAddress());
-            if (!adjustOutputDownwardsForFee(rekeyTx, toMove, Transaction.DEFAULT_TX_FEE, true)) {
+            if (!adjustOutputDownwardsForFee(rekeyTx, toMove, Transaction.DEFAULT_TX_FEE, true, 0)) {
                 log.error("Failed to adjust rekey tx for fees.");
                 return null;
             }

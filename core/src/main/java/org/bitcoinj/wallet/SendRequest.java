@@ -87,6 +87,7 @@ public class SendRequest {
      * UTXOs to use when sending. If left null, then the wallet automatically determine the UTXOs to use.
      */
     public List<TransactionOutput> utxos = null;
+    public int emptyWalletOutput = 0;
 
     /**
      * "Change" means the difference between the value gathered by a transactions inputs (the size of which you
