@@ -1,6 +1,6 @@
 /*
  * Copyright by the original author or authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package wallettemplate.controls;
+package org.bitcoinj.walletfx.controls;
 
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -32,9 +32,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.util.Duration;
-import wallettemplate.utils.GuiUtils;
-import wallettemplate.utils.easing.EasingMode;
-import wallettemplate.utils.easing.ElasticInterpolator;
+import org.bitcoinj.walletfx.utils.GuiUtils;
+import org.bitcoinj.walletfx.utils.easing.EasingMode;
+import org.bitcoinj.walletfx.utils.easing.ElasticInterpolator;
 
 import javax.annotation.Nullable;
 
@@ -55,8 +55,7 @@ public class NotificationBarPane extends BorderPane {
 
     public class Item {
         public final SimpleStringProperty label;
-        @Nullable
-        public final ObservableDoubleValue progress;
+        @Nullable public final ObservableDoubleValue progress;
 
         public Item(String label, @Nullable ObservableDoubleValue progress) {
             this.label = new SimpleStringProperty(label);
@@ -130,7 +129,6 @@ public class NotificationBarPane extends BorderPane {
     }
 
     private Timeline timeline;
-
     protected void animate(Number target) {
         if (timeline != null) {
             timeline.stop();

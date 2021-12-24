@@ -23,7 +23,9 @@ import javafx.stage.Stage;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Utils;
 import org.bitcoinj.kits.WalletAppKit;
+import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.params.RegTestParams;
+import org.bitcoinj.protocols.fusion.FusionClient;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.utils.AppDataDirectory;
 import org.bitcoinj.utils.BriefLogFormatter;
@@ -147,6 +149,28 @@ public abstract class WalletApplication implements AppDelegate {
             @Override
             protected void onSetupCompleted() {
                 Platform.runLater(controller::onBitcoinSetup);
+
+                try {
+                    FusionClient fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788); //cashfusion.electroncash.dk
+                    new Thread() {
+                        @Override
+                        public void run() {
+                            while(true) {
+                                if(fusionClient.getSocket().isConnected()) {
+                                    String response = null;
+                                    try {
+                                        response = fusionClient.sendMessage("ClientHello:" + MainNetParams.get().getGenesisBlock().getHashAsString());
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                    System.out.println("MESSAGE:: " + response);
+                                }
+                            }
+                        }
+                    }.start();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         };
         // Now configure and start the appkit. This will take a second or two - we could show a temporary splash screen

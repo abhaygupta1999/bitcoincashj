@@ -1,6 +1,6 @@
 /*
  * Copyright by the original author or authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-package wallettemplate.controls;
+package org.bitcoinj.walletfx.controls;
 
-import de.jensd.fx.fontawesome.AwesomeDude;
-import de.jensd.fx.fontawesome.AwesomeIcon;
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+
 import javafx.beans.binding.StringExpression;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
@@ -36,15 +38,17 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Pane;
+
 import org.bitcoinj.core.Address;
 import org.bitcoinj.uri.BitcoinURI;
-import wallettemplate.Main;
-import wallettemplate.utils.GuiUtils;
-import wallettemplate.utils.QRCodeImages;
 
-import java.awt.*;
-import java.io.IOException;
-import java.net.URI;
+import org.bitcoinj.walletfx.overlay.OverlayController;
+import org.bitcoinj.walletfx.overlay.OverlayableStackPaneController;
+import org.bitcoinj.walletfx.utils.GuiUtils;
+import org.bitcoinj.walletfx.utils.QRCodeImages;
+
+import de.jensd.fx.fontawesome.AwesomeDude;
+import de.jensd.fx.fontawesome.AwesomeIcon;
 
 import static javafx.beans.binding.Bindings.convert;
 
@@ -53,18 +57,32 @@ import static javafx.beans.binding.Bindings.convert;
  * address looks like a blue hyperlink. Next to it there are two icons, one that copies to the clipboard and another
  * that shows a QRcode.
  */
-public class ClickableBitcoinAddress extends AnchorPane {
-    @FXML
-    protected Label addressLabel;
-    @FXML
-    protected ContextMenu addressMenu;
-    @FXML
-    protected Label copyWidget;
-    @FXML
-    protected Label qrCode;
+public class ClickableBitcoinAddress extends AnchorPane implements OverlayController<ClickableBitcoinAddress> {
+    @FXML protected Label addressLabel;
+    @FXML protected ContextMenu addressMenu;
+    @FXML protected Label copyWidget;
+    @FXML protected Label qrCode;
 
     protected SimpleObjectProperty<Address> address = new SimpleObjectProperty<>();
     private final StringExpression addressStr;
+
+    private OverlayableStackPaneController rootController;
+
+    private String appName = "app-name";
+
+    @Override
+    public void initOverlay(OverlayableStackPaneController overlayableStackPaneController, OverlayableStackPaneController.OverlayUI<? extends OverlayController<ClickableBitcoinAddress>> ui) {
+        rootController = overlayableStackPaneController;
+    }
+
+    /**
+     * @param theAppName The application name to use in Bitcoin URIs
+     */
+    public void setAppName(String theAppName) {
+        appName = theAppName;
+    }
+
+
 
     public ClickableBitcoinAddress() {
         try {
@@ -89,7 +107,7 @@ public class ClickableBitcoinAddress extends AnchorPane {
     }
 
     public String uri() {
-        return BitcoinURI.convertToBitcoinURI(address.get(), null, Main.APP_NAME, null);
+        return BitcoinURI.convertToBitcoinURI(address.get(), null, appName, null);
     }
 
     public Address getAddress() {
@@ -144,7 +162,7 @@ public class ClickableBitcoinAddress extends AnchorPane {
         // non-centered on the screen. Finally fade/blur it in.
         Pane pane = new Pane(view);
         pane.setMaxSize(qrImage.getWidth(), qrImage.getHeight());
-        final Main.OverlayUI<ClickableBitcoinAddress> overlay = Main.instance.overlayUI(pane, this);
+        final OverlayableStackPaneController.OverlayUI<ClickableBitcoinAddress> overlay = rootController.overlayUI(pane, this);
         view.setOnMouseClicked(event1 -> overlay.done());
     }
 
