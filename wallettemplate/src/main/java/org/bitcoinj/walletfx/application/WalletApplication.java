@@ -17,10 +17,13 @@
 package org.bitcoinj.walletfx.application;
 
 import com.google.common.util.concurrent.Service;
+import com.google.protobuf.ByteString;
+import fusion.Fusion;
 import javafx.application.Platform;
 import javafx.scene.input.KeyCombination;
 import javafx.stage.Stage;
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.Utils;
 import org.bitcoinj.kits.WalletAppKit;
 import org.bitcoinj.params.MainNetParams;
@@ -32,11 +35,14 @@ import org.bitcoinj.utils.BriefLogFormatter;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.DeterministicSeed;
 import org.bitcoinj.walletfx.utils.GuiUtils;
+import org.bouncycastle.util.encoders.Hex;
 import wallettemplate.WalletSetPasswordController;
 
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLSocket;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 
 import static org.bitcoinj.walletfx.utils.GuiUtils.informationalAlert;
 
@@ -150,27 +156,18 @@ public abstract class WalletApplication implements AppDelegate {
             protected void onSetupCompleted() {
                 Platform.runLater(controller::onBitcoinSetup);
 
-                try {
-                    FusionClient fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788); //cashfusion.electroncash.dk
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            while(true) {
-                                if(fusionClient.getSocket().isConnected()) {
-                                    String response = null;
-                                    try {
-                                        response = fusionClient.sendMessage("ClientHello:" + MainNetParams.get().getGenesisBlock().getHashAsString());
-                                    } catch (IOException e) {
-                                        e.printStackTrace();
-                                    }
-                                    System.out.println("MESSAGE:: " + response);
-                                }
-                            }
+                new Thread() {
+                    @Override
+                    public void run() {
+                        FusionClient fusionClient; //cashfusion.electroncash.dk
+                        try {
+                            ArrayList<TransactionOutput> utxos = new ArrayList<>(wallet().getUtxos());
+                            fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788, utxos, params(), wallet());
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                    }.start();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                    }
+                }.start();
             }
         };
         // Now configure and start the appkit. This will take a second or two - we could show a temporary splash screen

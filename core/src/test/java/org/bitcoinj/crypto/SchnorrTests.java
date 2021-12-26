@@ -1,9 +1,12 @@
 package org.bitcoinj.crypto;
 
+import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.Sha256Hash;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Scanner;
 
@@ -67,5 +70,14 @@ public class SchnorrTests {
             if(scanner!=null)
                 scanner.close();
         }
+    }
+
+    @Test
+    public void blindTest() throws IOException {
+        ECKey myKey = new ECKey();
+        SchnorrBlindSigner signer = new SchnorrBlindSigner();
+        byte[] R = signer.getR();
+        byte[] messageHash = Sha256Hash.hash("Hello".getBytes());
+        SchnorrBlindSignatureRequest schnorrBlindSignatureRequest = new SchnorrBlindSignatureRequest(myKey.getPubKey(), R, messageHash);
     }
 }
