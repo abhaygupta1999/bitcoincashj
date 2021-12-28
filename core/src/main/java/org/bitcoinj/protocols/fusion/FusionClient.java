@@ -575,13 +575,15 @@ public class FusionClient {
                     Fusion.AllCommitments allCommitmentsMsg = allCommitmentsServerMsg.getAllcommitments();
                     List<ByteString> allCommitments = allCommitmentsMsg.getInitialCommitmentsList();
 
-                    ArrayList<Integer> myCommitmentIndexes = new ArrayList<>();
                     for(ByteString commitment : myCommitments) {
                         try {
                             int index = allCommitments.indexOf(commitment);
-                            myCommitmentIndexes.add(index);
+                            if(index == -1) {
+                                System.out.println("missing commitment");
+                                return false;
+                            }
                         } catch(Exception e) {
-                            System.out.println("missing component");
+                            System.out.println("missing commitment");
                             return false;
                         }
                     }
@@ -600,11 +602,13 @@ public class FusionClient {
                             return false;
                         }
 
-                        ArrayList<Integer> myComponentIndexes = new ArrayList<>();
-                        for(ByteString component : allComponents) {
+                        for(ByteString component : myComponents) {
                             try {
                                 int index = allComponents.indexOf(component);
-                                myComponentIndexes.add(index);
+                                if(index == -1) {
+                                    System.out.println("missing component");
+                                    return false;
+                                }
                             } catch(Exception e) {
                                 System.out.println("missing component");
                                 return false;
