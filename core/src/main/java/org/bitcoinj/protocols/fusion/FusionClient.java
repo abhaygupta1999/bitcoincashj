@@ -508,26 +508,25 @@ public class FusionClient {
                 return RoundStatus.FALSE;
             }
 
+            ArrayList<ByteString> myCommitments = new ArrayList<>();
+            ArrayList<ByteString> myComponents = new ArrayList<>();
             ArrayList<ByteString> blindSignatureRequestsByteString = new ArrayList<>();
             ArrayList<SchnorrBlindSignatureRequest> blindSignatureRequests = new ArrayList<>();
             for(int x = 0; x < blindNoncePoints.size(); x++) {
                 byte[] R = blindNoncePoints.get(x).toByteArray();
+                byte[] commitSer = generatedComponents.getComponents().get(x).getCommitSer();
                 byte[] compSer = generatedComponents.getComponents().get(x).getCompSer();
                 SchnorrBlindSignatureRequest schnorrBlindSignatureRequest = new SchnorrBlindSignatureRequest(roundPubKey, R, Sha256Hash.hash(compSer));
                 blindSignatureRequestsByteString.add(ByteString.copyFrom(schnorrBlindSignatureRequest.getRequest()));
                 blindSignatureRequests.add(schnorrBlindSignatureRequest);
-            }
 
-            ArrayList<ByteString> myCommitments = new ArrayList<>();
-            for(Component component : generatedComponents.getComponents()) {
-                ByteString byteString = ByteString.copyFrom(component.getCommitSer());
-                myCommitments.add(byteString);
-            }
+                //commitments
+                ByteString commitmentByteString = ByteString.copyFrom(commitSer);
+                myCommitments.add(commitmentByteString);
 
-            ArrayList<ByteString> myComponents = new ArrayList<>();
-            for(Component component : generatedComponents.getComponents()) {
-                ByteString byteString = ByteString.copyFrom(component.getCompSer());
-                myComponents.add(byteString);
+                //components
+                ByteString componentByteString = ByteString.copyFrom(compSer);
+                myComponents.add(componentByteString);
             }
 
             byte[] randomNumber = new SecureRandom().generateSeed(32);
@@ -580,8 +579,14 @@ public class FusionClient {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+
+                if(myComponents.size() != blindSigs.size()) {
+                    System.out.println("My components size != blind Sigs size!");
+                    return RoundStatus.FALSE;
+                }
+
                 ArrayList<Fusion.CovertMessage> covertMessages = new ArrayList<>();
-                for(int x = 0; x < blindSigs.size(); x++) {
+                for(int x = 0; x < myComponents.size(); x++) {
                     ByteString component = myComponents.get(x);
                     byte[] sig = blindSigs.get(x);
                     Fusion.CovertComponent covertComponent = Fusion.CovertComponent.newBuilder()
@@ -619,8 +624,6 @@ public class FusionClient {
                     Fusion.ServerMessage shareCovertComponentsServerMsg = this.receiveMessage(+20);
                     if(shareCovertComponentsServerMsg.hasSharecovertcomponents()) {
                         Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
-                        System.out.println("SHARE COVERT COMPONENTS::");
-                        System.out.println(shareCovertComponentsMsg);
                         ByteString msgSessionHash = shareCovertComponentsMsg.getSessionHash();
                         List<ByteString> allComponents = shareCovertComponentsMsg.getComponentsList();
                         boolean skipSignatures = shareCovertComponentsMsg.getSkipSignatures();
@@ -636,6 +639,8 @@ public class FusionClient {
                                 if(index == -1) {
                                     System.out.println("missing component");
                                     return RoundStatus.FALSE;
+                                } else {
+                                    System.out.println("has component!");
                                 }
                             } catch(Exception e) {
                                 System.out.println("missing component");

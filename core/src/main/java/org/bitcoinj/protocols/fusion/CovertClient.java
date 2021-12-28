@@ -40,11 +40,21 @@ public class CovertClient {
                     BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
                     BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
                     setSocket(socket, out, in);
+                    ping();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }.start();
+    }
+
+    private void ping() throws IOException {
+        Fusion.Ping ping = Fusion.Ping.newBuilder()
+                .build();
+        Fusion.CovertMessage covertMessage = Fusion.CovertMessage.newBuilder()
+                .setPing(ping)
+                .build();
+        this.submit(covertMessage);
     }
 
     private void setSocket(Socket socket, BufferedOutputStream out, BufferedInputStream in) {
