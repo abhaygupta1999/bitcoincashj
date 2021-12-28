@@ -31,7 +31,7 @@ public class SchnorrBlindSigner {
 
     private BigInteger nextRandomBigInteger(BigInteger n) {
         Random rand = new Random();
-        BigInteger result = new BigInteger(n.bitLength(), rand);
+        BigInteger result = new BigInteger(n.bitLength()-8, rand);
         while( result.compareTo(n) >= 0 ) {
             result = new BigInteger(n.bitLength(), rand);
         }

@@ -4,9 +4,12 @@ import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.UnsafeByteArrayOutputStream;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.encoders.Hex;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Random;
 
 public class SchnorrBlindSignatureRequest {
@@ -33,10 +36,11 @@ public class SchnorrBlindSignatureRequest {
         this.a = a;
         this.b = b;
 
-        ECPoint Rpoint = ECKey.CURVE.getCurve().decodePoint(R);
+        ECPoint Rpoint = ECKey.fromPublicOnly(R).getPubKeyPoint();
         ECPoint pubPoint = ECKey.fromPublicOnly(pubKey).getPubKeyPoint();
-        this.pubKeyCompressed = ECKey.fromPublicOnly(pubPoint, true).getPubKey();
-        ECPoint Rnew = Rpoint.add((ECKey.CURVE.getG().multiply(a)).add((pubPoint.multiply(b))));
+        this.pubKeyCompressed = pubPoint.getEncoded(true);
+
+        ECPoint Rnew = Rpoint.add(ECKey.CURVE.getG().multiply(a)).add((pubPoint.multiply(b)));
         this.Rxnew = Rnew.getXCoord().toBigInteger().toByteArray();
         this.y = Rnew.getYCoord().toBigInteger();
         this.c = jacobi(y, fieldSize);
@@ -47,6 +51,8 @@ public class SchnorrBlindSignatureRequest {
         bos.write(messageHash);
         byte[] eHash = Sha256Hash.hash(bos.toByteArray());
         this.e = (this.c.multiply(new BigInteger(eHash)).add(b)).mod(order);
+        System.out.println("e len " + this.e.toByteArray().length);
+        System.out.println("jacobi " + this.c);
     }
 
     private BigInteger jacobi(BigInteger a, BigInteger n) {
@@ -117,15 +123,22 @@ public class SchnorrBlindSignatureRequest {
     }
 
     public byte[] getRequest() {
-        return this.e.toByteArray();
+        byte[] array = this.e.toByteArray();
+        int length = array.length;
+        if(length == 33) {
+            array = Arrays.copyOfRange(array, 1, 33);
+        }
+        return array;
     }
 
     private BigInteger nextRandomBigInteger(BigInteger n) {
         Random rand = new Random();
-        BigInteger result = new BigInteger(n.bitLength(), rand);
-        while( result.compareTo(n) >= 0 ) {
-            result = new BigInteger(n.bitLength(), rand);
-        }
-        return result;
+        BigInteger randomNumber;
+        do {
+            randomNumber = new BigInteger(n.bitLength()-8, rand);
+        } while (randomNumber.compareTo(n) >= 0);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(32);
+        byteBuffer.put(randomNumber.toByteArray());
+        return new BigInteger(byteBuffer.array());
     }
 }

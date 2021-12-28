@@ -693,12 +693,11 @@ public class FusionClient {
                     }
                 }
 
-                return RoundStatus.FALSE;
             } else {
                 System.out.println("ROUND MESSAGE: ");
                 System.out.println(blindSigServerMessage);
-                return RoundStatus.FALSE;
             }
+            return RoundStatus.FALSE;
         }
 
         return RoundStatus.FALSE;
