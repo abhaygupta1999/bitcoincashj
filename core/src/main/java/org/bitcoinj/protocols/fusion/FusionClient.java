@@ -787,7 +787,7 @@ public class FusionClient {
 
                 byte[] commitSer = initialCommitment.toByteArray();
                 ByteBuffer pedersonNonceBuffer = ByteBuffer.allocate(32);
-                pedersonNonceBuffer.put(commitment.getNonce().toByteArray());
+                pedersonNonceBuffer.put(Utils.bigIntegerToBytes(commitment.getNonce(), 32));
                 byte[] pedersonNonce = pedersonNonceBuffer.array();
                 Fusion.Proof.Builder proofBuilder = Fusion.Proof.newBuilder()
                         .setSalt(ByteString.copyFrom(salt))
@@ -940,6 +940,9 @@ public class FusionClient {
             }
         }
 
+        System.out.println("TX::");
+        System.out.println(tx.toHexString());
+        System.out.println(tx.toString());
         return tx;
     }
 }

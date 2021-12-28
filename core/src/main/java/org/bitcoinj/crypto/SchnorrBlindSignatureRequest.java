@@ -3,18 +3,25 @@ package org.bitcoinj.crypto;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.UnsafeByteArrayOutputStream;
+import org.bitcoinj.core.Utils;
+import org.bouncycastle.math.ec.ECFieldElement;
 import org.bouncycastle.math.ec.ECPoint;
 import org.bouncycastle.util.encoders.Hex;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Random;
 
 public class SchnorrBlindSignatureRequest {
-    protected static final BigInteger order = new BigInteger("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16);
-    protected static final BigInteger fieldSize = new BigInteger("115792089237316195423570985008687907853269984665640564039457584007908834671663");
+    public static final BigInteger[] G = {
+            new BigInteger("79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798", 16),
+            new BigInteger("483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8", 16)
+    };
+    public static final BigInteger n = new BigInteger("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
+    public static final BigInteger p = new BigInteger("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F", 16);
     private byte[] pubKey;
     private byte[] pubKeyCompressed;
     private byte[] R;
@@ -31,28 +38,26 @@ public class SchnorrBlindSignatureRequest {
         this.R = R;
         this.messageHash = messageHash;
 
-        BigInteger a = nextRandomBigInteger(order);
-        BigInteger b = nextRandomBigInteger(order);
+        BigInteger a = new ECKey().getPrivKey();
+        BigInteger b = new ECKey().getPrivKey();
         this.a = a;
         this.b = b;
 
-        ECPoint Rpoint = ECKey.fromPublicOnly(R).getPubKeyPoint();
-        ECPoint pubPoint = ECKey.fromPublicOnly(pubKey).getPubKeyPoint();
-        this.pubKeyCompressed = pubPoint.getEncoded(true);
+        BigInteger[] Rpoint = SchnorrSignature.point_from_bytes(R);
+        BigInteger[] pubPoint = SchnorrSignature.point_from_bytes(pubKey);
+        this.pubKeyCompressed = ECKey.fromPublicOnly(pubKey).getPubKeyPoint().getEncoded(true);
 
-        ECPoint Rnew = Rpoint.add(ECKey.CURVE.getG().multiply(a)).add((pubPoint.multiply(b)));
-        this.Rxnew = Rnew.getXCoord().toBigInteger().toByteArray();
-        this.y = Rnew.getYCoord().toBigInteger();
-        this.c = jacobi(y, fieldSize);
+        BigInteger[] Rnew = SchnorrSignature.point_add(SchnorrSignature.point_add(Rpoint, SchnorrSignature.point_mul(G, a)), SchnorrSignature.point_mul(pubPoint, b));
+        this.Rxnew = Utils.bigIntegerToBytes(Rnew[0], 32);
+        this.y = Rnew[1];
+        this.c = jacobi(y, p);
 
-        UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
-        bos.write(Rxnew);
-        bos.write(pubKeyCompressed);
-        bos.write(messageHash);
-        byte[] eHash = Sha256Hash.hash(bos.toByteArray());
-        this.e = (this.c.multiply(new BigInteger(eHash)).add(b)).mod(order);
-        System.out.println("e len " + this.e.toByteArray().length);
-        System.out.println("jacobi " + this.c);
+        ByteBuffer eBuffer = ByteBuffer.allocate(32 + 33 + 32);
+        eBuffer.put(Rxnew);
+        eBuffer.put(pubKeyCompressed);
+        eBuffer.put(messageHash);
+        byte[] eHash = Sha256Hash.hash(eBuffer.array());
+        this.e = (this.c.multiply(SchnorrSignature.toBigInteger(eHash)).add(b)).mod(n);
     }
 
     private BigInteger jacobi(BigInteger a, BigInteger n) {
@@ -98,15 +103,16 @@ public class SchnorrBlindSignatureRequest {
 
     public byte[] blindFinalize(byte[] sBytes) throws IOException {
         if(sBytes.length != 32) {
+            System.out.println("sBytes not 32");
             return null;
         }
 
-        BigInteger s = new BigInteger(sBytes);
+        BigInteger s = SchnorrSignature.toBigInteger(sBytes);
 
-        BigInteger sNew = this.c.multiply(s.add(this.a)).mod(order);
+        BigInteger sNew = this.c.multiply(s.add(this.a)).mod(n);
         UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
         bos.write(Rxnew);
-        bos.write(sNew.toByteArray());
+        bos.write(Utils.bigIntegerToBytes(sNew, 32));
         return bos.toByteArray();
     }
 
@@ -123,22 +129,6 @@ public class SchnorrBlindSignatureRequest {
     }
 
     public byte[] getRequest() {
-        byte[] array = this.e.toByteArray();
-        int length = array.length;
-        if(length == 33) {
-            array = Arrays.copyOfRange(array, 1, 33);
-        }
-        return array;
-    }
-
-    private BigInteger nextRandomBigInteger(BigInteger n) {
-        Random rand = new Random();
-        BigInteger randomNumber;
-        do {
-            randomNumber = new BigInteger(n.bitLength()-8, rand);
-        } while (randomNumber.compareTo(n) >= 0);
-        ByteBuffer byteBuffer = ByteBuffer.allocate(32);
-        byteBuffer.put(randomNumber.toByteArray());
-        return new BigInteger(byteBuffer.array());
+        return Utils.bigIntegerToBytes(this.e, 32);
     }
 }

@@ -33,27 +33,35 @@ public class CovertSubmitter {
     }
 
     public void scheduleSubmissions(final ArrayList<Fusion.CovertMessage> covertMessages, final long startTime) {
+        for(CovertClient client : connections) {
+            client.done = false;
+        }
         new Thread() {
             @Override
             public void run() {
-                while(true) {
-                    long currentTime = System.currentTimeMillis()/1000L;
-                    if(currentTime >= startTime) {
-                        ArrayList<CovertClient> connectionsCopy = new ArrayList<>(connections);
-                        for(Fusion.CovertMessage covertMessage : covertMessages) {
-                            int index = new Random().nextInt(connectionsCopy.size());
-                            CovertClient covertClient = connectionsCopy.get(index);
-                            try {
+                int messageIndex = 0;
+                ArrayList<CovertClient> connectionsCopy = new ArrayList<>(connections);
+                ArrayList<Fusion.CovertMessage> messagesCopy = new ArrayList<>(covertMessages);
+                for(Fusion.CovertMessage covertMessage : messagesCopy) {
+                    while (true) {
+                        CovertClient covertClient = connectionsCopy.get(messageIndex);
+                        try {
+                            if (!covertClient.done) {
                                 covertClient.submit(covertMessage);
-                            } catch (IOException e) {
-                                e.printStackTrace();
+                                Fusion.CovertResponse response = covertClient.receiveMessage(3);
+                                if (response.hasOk()) {
+                                    System.out.println("response ok");
+                                    covertClient.done = true;
+                                    messageIndex++;
+                                    break;
+                                }
                             }
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                        break;
                     }
                 }
             }
         }.start();
-
     }
 }

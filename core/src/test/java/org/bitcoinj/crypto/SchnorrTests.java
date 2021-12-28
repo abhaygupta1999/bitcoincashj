@@ -2,6 +2,7 @@ package org.bitcoinj.crypto;
 
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Sha256Hash;
+import org.bouncycastle.util.encoders.Hex;
 import org.junit.Test;
 
 import java.io.File;
@@ -9,6 +10,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Scanner;
+
+import static org.junit.Assert.assertEquals;
 
 public class SchnorrTests {
     /*
@@ -79,5 +82,9 @@ public class SchnorrTests {
         byte[] R = signer.getR();
         byte[] messageHash = Sha256Hash.hash("Hello".getBytes());
         SchnorrBlindSignatureRequest schnorrBlindSignatureRequest = new SchnorrBlindSignatureRequest(myKey.getPubKey(), R, messageHash);
+        byte[] sBytes = signer.sign(myKey, schnorrBlindSignatureRequest.getRequest());
+        byte[] sig = schnorrBlindSignatureRequest.blindFinalize(sBytes);
+        System.out.println("Sig: " + Hex.toHexString(sig));
+        assertEquals(true, SchnorrSignature.schnorr_verify(messageHash, myKey.getPubKey(), sig));
     }
 }

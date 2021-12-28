@@ -1,17 +1,13 @@
 package org.bitcoinj.crypto;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.bitcoinj.core.ECKey;
 import org.bouncycastle.math.ec.ECPoint;
-import org.bouncycastle.util.encoders.Hex;
 
 import javax.annotation.Nullable;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
+import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
 
 public class Pedersen {
     protected static final BigInteger order = ECKey.CURVE.getN();
@@ -90,7 +86,8 @@ public class Pedersen {
         if(points.size() < 512) {
             try {
                 pUncompressed = addPoints(points);
-            }catch (Exception ignored) {
+            }catch (Exception e) {
+                e.printStackTrace();
             }
         }
 
@@ -113,7 +110,7 @@ public class Pedersen {
             this.setup = setup;
             this.amount = amount.longValue();
             this.amountMod = amount.mod(order);
-            this.nonce = nextRandomBigInteger(order);
+            this.nonce = new ECKey().getPrivKey();
             if(nonce.compareTo(BigInteger.ZERO) < 0 || nonce.compareTo(order) > 0) {
                 return;
             }
@@ -171,15 +168,6 @@ public class Pedersen {
             }
             this.pCompressed = Ppoint.getEncoded(true);
             this.pUncompressed = Ppoint.getEncoded(false);
-        }
-
-        private BigInteger nextRandomBigInteger(BigInteger n) {
-            Random rand = new Random();
-            BigInteger randomNumber;
-            do {
-                randomNumber = new BigInteger(n.bitLength()-8, rand);
-            } while (randomNumber.compareTo(n) >= 0);
-            return randomNumber;
         }
 
         public byte[] getpCompressed() {
