@@ -8,20 +8,19 @@ import javax.net.SocketFactory;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.Socket;
-import java.net.SocketAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class CovertClient {
+    public boolean brokenPipe = false;
     public boolean done = true;
     private String host;
     private int port;
     private Socket socket;
     private BufferedOutputStream out;
     private BufferedInputStream in;
+    public Thread socketThread = null;
 
     public CovertClient(String host, int port) {
         this.host = host;
@@ -29,7 +28,7 @@ public class CovertClient {
     }
 
     public void runConnection() {
-        new Thread() {
+        socketThread = new Thread() {
             @Override
             public void run() {
                 try {
@@ -43,11 +42,29 @@ public class CovertClient {
                     BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
                     setSocket(socket, out, in);
                     ping();
+                    brokenPipe = false;
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
-        }.start();
+        };
+        socketThread.start();
+    }
+
+    public void restartConnection() {
+        try {
+            out.close();
+            in.close();
+            socketThread.stop();
+            socketThread = null;
+            runConnection();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public Socket getSocket() {
+        return socket;
     }
 
     private void ping() throws IOException {
@@ -65,22 +82,26 @@ public class CovertClient {
         this.in = in;
     }
 
-    public void submit(Fusion.CovertMessage covertMessage) throws IOException {
+    public void submit(Fusion.CovertMessage covertMessage) {
         System.out.println("Still connected?? " + this.socket.isConnected());
         byte[] magicBytes = Hex.decode("765be8b4e4396dcf");
 
         int size = covertMessage.toByteArray().length;
+        try {
+            UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
+            bos.write(magicBytes);
 
-        UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
-        bos.write(magicBytes);
+            ByteBuffer sizeBuf = ByteBuffer.allocate(4);
+            sizeBuf.putInt(size);
+            bos.write(sizeBuf.array());
 
-        ByteBuffer sizeBuf = ByteBuffer.allocate(4);
-        sizeBuf.putInt(size);
-        bos.write(sizeBuf.array());
-
-        bos.write(covertMessage.toByteArray());
-        out.write(bos.toByteArray());
-        out.flush();
+            bos.write(covertMessage.toByteArray());
+            out.write(bos.toByteArray());
+            out.flush();
+        } catch(IOException e) {
+            e.printStackTrace();
+            brokenPipe = true;
+        }
     }
 
     public Fusion.CovertResponse receiveMessage(int timeout) {

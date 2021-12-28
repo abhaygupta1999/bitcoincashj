@@ -22,8 +22,6 @@ public class CovertSubmitter {
             CovertClient sleepingClient = new CovertClient(covertDomain, covertPort);
             connections.add(sleepingClient);
         }
-
-        connections.addAll(spareConnections);
     }
 
     public void scheduleConnections() {
@@ -45,10 +43,16 @@ public class CovertSubmitter {
                 for(Fusion.CovertMessage covertMessage : messagesCopy) {
                     while (true) {
                         CovertClient covertClient = connectionsCopy.get(messageIndex);
-                        try {
-                            if (!covertClient.done) {
-                                covertClient.submit(covertMessage);
-                                Fusion.CovertResponse response = covertClient.receiveMessage(3);
+                        while(covertClient.brokenPipe) {
+                            covertClient.restartConnection();
+                            int randSpare = new Random().nextInt(spareConnections.size());
+                            covertClient = spareConnections.get(randSpare);
+                        }
+                        if (!covertClient.done) {
+                            covertClient.submit(covertMessage);
+                            Fusion.CovertResponse response = covertClient.receiveMessage(3);
+                            if(response != null) {
+                                System.out.println(response);
                                 if (response.hasOk()) {
                                     System.out.println("response ok");
                                     covertClient.done = true;
@@ -56,8 +60,6 @@ public class CovertSubmitter {
                                     break;
                                 }
                             }
-                        } catch (IOException e) {
-                            e.printStackTrace();
                         }
                     }
                 }

@@ -406,7 +406,7 @@ public class FusionClient {
         int covertPort = fusionBegin.getCovertPort();
 
         try {
-            this.lastHash = calcInitialHash(this.tier, covertDomain, covertPort, fusionBegin.getServerTime());
+            this.lastHash = calcInitialHash(this.tier, fusionBegin.getCovertDomain(), covertPort, fusionBegin.getServerTime());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -803,7 +803,7 @@ public class FusionClient {
 
         sumNonce = sumNonce.mod(pedersen.getOrder());
         ByteBuffer pedersonTotalNonceBuffer = ByteBuffer.allocate(32);
-        pedersonTotalNonceBuffer.put(sumNonce.toByteArray());
+        pedersonTotalNonceBuffer.put(Utils.bigIntegerToBytes(sumNonce, 32));
         byte[] pedersenTotalNonce = pedersonTotalNonceBuffer.array();
 
         return new GeneratedComponents(resultList, sumAmounts, pedersenTotalNonce);
@@ -848,7 +848,7 @@ public class FusionClient {
         return zipped;
     }
 
-    public byte[] calcInitialHash(long tier, String covertDomain, int covertPort, long beginTime) throws IOException {
+    public byte[] calcInitialHash(long tier, ByteString covertDomain, int covertPort, long beginTime) throws IOException {
         UnsafeByteArrayOutputStream hashBos = new UnsafeByteArrayOutputStream();
         addToBos(hashBos, "Cash Fusion Session".getBytes());
         addToBos(hashBos, "alpha13".getBytes());
@@ -856,8 +856,7 @@ public class FusionClient {
         tierBuffer.putLong(tier);
         byte[] tierBytes = tierBuffer.array();
         addToBos(hashBos, tierBytes);
-        byte[] domainBytes = covertDomain.getBytes();
-        addToBos(hashBos, domainBytes);
+        addToBos(hashBos, covertDomain.toByteArray());
         ByteBuffer portBuffer = ByteBuffer.allocate(4);
         portBuffer.putInt(covertPort);
         byte[] portBytes = portBuffer.array();
