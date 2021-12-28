@@ -655,8 +655,9 @@ public class FusionClient {
 
                             System.out.println("Scheduling signature submission");
                             covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20);
-
-                            return true;
+                            Fusion.FusionResult result = this.receiveMessage(20).getFusionresult();
+                            System.out.println("result: " + result);
+                            return result.getOk();
                         } else {
                             return false;
                         }
