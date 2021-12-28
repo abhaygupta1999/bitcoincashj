@@ -408,6 +408,11 @@ public class FusionClient {
         while((System.currentTimeMillis()/1000L) < tend) {
             long remTime = tend-(System.currentTimeMillis()/1000L);
             System.out.println("Waiting for startround... " + remTime);
+            try {
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
         return covertSubmitter;
@@ -858,7 +863,7 @@ public class FusionClient {
         tx.setVersion(1);
         tx.setLockTime(0);
         Script opReturnScript = new ScriptBuilder().op(ScriptOpCodes.OP_RETURN)
-                .data(Hex.decode("46555a0020"))
+                .data(Hex.decode("46555a00"))
                 .data(sessionHash)
                 .build();
         tx.addOutput(Coin.ZERO, opReturnScript);
