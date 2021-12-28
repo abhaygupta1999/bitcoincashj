@@ -8,6 +8,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.bitcoinj.core.*;
 import org.bitcoinj.crypto.Pedersen;
 import org.bitcoinj.crypto.SchnorrBlindSignatureRequest;
+import org.bitcoinj.crypto.SchnorrSignature;
 import org.bitcoinj.protocols.fusion.models.Component;
 import org.bitcoinj.protocols.fusion.models.GeneratedComponents;
 import org.bitcoinj.protocols.fusion.models.Tier;
@@ -56,6 +57,7 @@ public class FusionClient {
     private long tier;
 
     private byte[] lastHash;
+    private byte[] sessionHash;
 
     //TIME VARIABLES
     private long tFusionBegin = 0;
@@ -584,8 +586,14 @@ public class FusionClient {
                         Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
                         System.out.println("SHARE COVERT COMPONENTS::");
                         System.out.println(shareCovertComponentsMsg);
+                        ByteString msgSessionHash = shareCovertComponentsMsg.getSessionHash();
                         List<ByteString> allComponents = shareCovertComponentsMsg.getComponentsList();
                         boolean skipSignatures = shareCovertComponentsMsg.getSkipSignatures();
+
+                        if(covertClock() > 20) {
+                            System.out.println("Shared components message arrived too slowly.");
+                            return false;
+                        }
 
                         ArrayList<Integer> myComponentIndexes = new ArrayList<>();
                         for(ByteString component : allComponents) {
@@ -598,7 +606,60 @@ public class FusionClient {
                             }
                         }
 
-                        return true;
+                        this.lastHash = sessionHash = calcRoundHash(lastHash, roundPubKey, roundTime, allCommitments, allComponents);
+                        ByteString sessionHashBs = ByteString.copyFrom(this.sessionHash);
+                        if(!msgSessionHash.equals(sessionHashBs)) {
+                            System.out.println("Session hashes do not match!");
+                            return false;
+                        }
+
+                        if(!skipSignatures) {
+                            System.out.println("Submitting signatures...");
+                            Transaction tx = constructTransaction(allComponents, sessionHash);
+                            ArrayList<Fusion.CovertMessage> covertSignatureMessages = new ArrayList<>();
+
+                            for(TransactionInput input : tx.getInputs()) {
+                                TransactionOutput output = input.findConnectedOutput(wallet);
+                                if(output == null)
+                                    continue;
+
+                                Address address = output.getAddressFromP2PKHScript(wallet.getParams());
+                                if(address == null)
+                                    continue;
+
+                                ECKey key = wallet.findKeyFromAddress(address);
+                                if(output.isMine(wallet)) {
+                                    System.out.println("Calculating signature...");
+                                    SchnorrSignature schnorrSignature = tx.calculateSchnorrSignature(
+                                            input.getIndex(),
+                                            key,
+                                            output.getScriptPubKey().getProgram(),
+                                            output.getValue(),
+                                            Transaction.SigHash.ALL,
+                                            false
+                                    );
+
+
+                                    Fusion.CovertTransactionSignature covertTransactionSignature = Fusion.CovertTransactionSignature.newBuilder()
+                                            .setRoundPubkey(ByteString.copyFrom(roundPubKey))
+                                            .setTxsignature(ByteString.copyFrom(schnorrSignature.encodeToBitcoin()))
+                                            .setWhichInput(input.getIndex())
+                                            .build();
+                                    Fusion.CovertMessage covertMessage = Fusion.CovertMessage.newBuilder()
+                                            .setSignature(covertTransactionSignature)
+                                            .build();
+                                    covertSignatureMessages.add(covertMessage);
+                                    System.out.println("Signature added.");
+                                }
+                            }
+
+                            System.out.println("Scheduling signature submission");
+                            covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20);
+
+                            return true;
+                        } else {
+                            return false;
+                        }
                     }
                 }
             }
@@ -735,10 +796,8 @@ public class FusionClient {
 
     public byte[] calcInitialHash(long tier, String covertDomain, int covertPort, long beginTime) throws IOException {
         UnsafeByteArrayOutputStream hashBos = new UnsafeByteArrayOutputStream();
-        byte[] tag = "Cash Fusion Session".getBytes();
-        addToBos(hashBos, tag);
-        byte[] version = "alpha13".getBytes();
-        addToBos(hashBos, version);
+        addToBos(hashBos, "Cash Fusion Session".getBytes());
+        addToBos(hashBos, "alpha13".getBytes());
         ByteBuffer tierBuffer = ByteBuffer.allocate(8);
         tierBuffer.putLong(tier);
         byte[] tierBytes = tierBuffer.array();
@@ -749,13 +808,37 @@ public class FusionClient {
         portBuffer.putInt(covertPort);
         byte[] portBytes = portBuffer.array();
         addToBos(hashBos, portBytes);
-        byte[] ssl = Hex.decode("00");
-        addToBos(hashBos, ssl);
+        addToBos(hashBos, Hex.decode("00"));
         ByteBuffer timeBuffer = ByteBuffer.allocate(8);
         timeBuffer.putLong(beginTime);
         byte[] timeBytes = timeBuffer.array();
         addToBos(hashBos, timeBytes);
         return Sha256Hash.hash(hashBos.toByteArray());
+    }
+
+    @SafeVarargs
+    public final byte[] calcRoundHash(byte[] lastHash, byte[] roundPubKey, long roundTime, List<ByteString>... lists) throws IOException {
+        UnsafeByteArrayOutputStream hashBos = new UnsafeByteArrayOutputStream();
+        addToBos(hashBos, "Cash Fusion Round".getBytes());
+        addToBos(hashBos, lastHash);
+        addToBos(hashBos, roundPubKey);
+        ByteBuffer roundTimeBuffer = ByteBuffer.allocate(8);
+        roundTimeBuffer.putLong(roundTime);
+        byte[] roundTimeBytes = roundTimeBuffer.array();
+        addToBos(hashBos, roundTimeBytes);
+        for(List<ByteString> list : lists) {
+            byte[] listHash = listHash(list);
+            addToBos(hashBos, listHash);
+        }
+        return Sha256Hash.hash(hashBos.toByteArray());
+    }
+
+    public byte[] listHash(List<ByteString> list) throws IOException {
+        UnsafeByteArrayOutputStream hashBos = new UnsafeByteArrayOutputStream();
+        for(ByteString byteString : list) {
+            addToBos(hashBos, byteString.toByteArray());
+        }
+        return hashBos.toByteArray();
     }
 
     public void addToBos(UnsafeByteArrayOutputStream bos, byte[] bytes) throws IOException {
@@ -784,7 +867,6 @@ public class FusionClient {
                 case INPUT:
                     Fusion.InputComponent inputComponent = component.getInput();
                     Coin inputAmount = Coin.valueOf(inputComponent.getAmount());
-                    Address address = ECKey.fromPublicOnly(inputComponent.getPubkey().toByteArray()).toAddress(wallet.getParams());
                     byte[] prevOutTxId = Sha256Hash.wrap(inputComponent.getPrevTxid().toByteArray()).getReversedBytes();
                     TransactionOutPoint outpoint = new TransactionOutPoint(wallet.getParams(), inputComponent.getPrevIndex(), Sha256Hash.wrap(prevOutTxId));
                     TransactionInput input = new TransactionInput(wallet.getParams(), null, ScriptBuilder.createEmpty().getProgram(), outpoint, inputAmount);
