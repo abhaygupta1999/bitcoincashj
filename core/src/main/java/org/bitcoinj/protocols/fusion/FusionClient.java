@@ -233,15 +233,17 @@ public class FusionClient {
             if(outputs.isEmpty() || outputs.size() < minOutputs)
                 continue;
 
-            ArrayList<Long> adjustedOutputs = new ArrayList<>();
-            for(long output : outputs) {
-                adjustedOutputs.add(output - feePerOutput);
+            for(int x = 0; x < outputs.size(); x++) {
+                long output = outputs.get(x);
+                long adjusted = output - feePerOutput;
+                outputs.set(x, adjusted);
             }
 
-            if((this.inputs.size() + adjustedOutputs.size()) > MAX_COMPONENTS)
+            if((this.inputs.size() + outputs.size()) > MAX_COMPONENTS)
                 continue;
 
-            excessFees.put(tier.getTierSize(), (sumInputsValue - inputFees - reducedAvailableForOutputs));
+            long excessFee = (sumInputsValue - inputFees - reducedAvailableForOutputs);
+            excessFees.put(tier.getTierSize(), excessFee);
             tierOutputs.put(tier.getTierSize(), outputs);
         }
 
@@ -361,7 +363,8 @@ public class FusionClient {
 
                         while(true) {
                             try {
-                                if(runRound(covertSubmitter))
+                                RoundStatus status = runRound(covertSubmitter);
+                                if(status == RoundStatus.TRUE || status == RoundStatus.QUIT)
                                     break;
                             } catch(Exception e) {
                                 e.printStackTrace();
@@ -418,12 +421,18 @@ public class FusionClient {
         return covertSubmitter;
     }
 
-    private boolean runRound(CovertSubmitter covertSubmitter) throws IOException {
+    public enum RoundStatus {
+        TRUE,
+        FALSE,
+        QUIT
+    }
+
+    private RoundStatus runRound(CovertSubmitter covertSubmitter) throws Exception {
         Fusion.ServerMessage serverMessage = receiveMessage((2 * WARMUP_SLOP + STANDARD_TIMEOUT));
 
         if(serverMessage == null) {
             System.out.println("Could not receive message!");
-            return false;
+            return RoundStatus.QUIT;
         }
 
         if(serverMessage.hasStartround()) {
@@ -435,14 +444,14 @@ public class FusionClient {
 
             long clockMismatch = roundTime - covertT0;
             if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
-                return false;
+                return RoundStatus.FALSE;
             }
 
             if(tFusionBegin != 0) {
                 long lag = covertT0 - tFusionBegin - WARMUP_TIME;
                 if(Math.abs(lag) > WARMUP_SLOP) {
                     System.out.println("Warmup period too different from expectation");
-                    return false;
+                    return RoundStatus.FALSE;
                 }
                 this.tFusionBegin = 0;
             }
@@ -466,13 +475,17 @@ public class FusionClient {
 
             long totalFee = sumIn - sumOut;
             long excessFee = totalFee - inputFees - outputFees;
+            if(excessFee > MAX_EXCESS_FEE) {
+                System.out.println("EXCESS FEE GREATER THAN MAX_EXCESS_FEE");
+                return RoundStatus.QUIT;
+            }
 
             byte[] roundPubKey = startRound.getRoundPubkey().toByteArray();
             List<ByteString> blindNoncePoints = startRound.getBlindNoncePointsList();
 
             if(blindNoncePoints.size() != this.numComponents) {
                 System.out.println("blind nonce miscount");
-                return false;
+                return RoundStatus.FALSE;
             }
 
             long numBlanks = this.numComponents - this.inputs.size() - this.tierOutputs.get(this.tier).size();
@@ -480,11 +493,11 @@ public class FusionClient {
             GeneratedComponents generatedComponents = genComponents(numBlanks, this.inputs, this.outputs, componentFeeRate);
             if(!BigInteger.valueOf(excessFee).equals(generatedComponents.getSumAmounts())) {
                 System.out.println("excess fee does not equal pedersen amount");
-                return false;
+                return RoundStatus.FALSE;
             }
             if(blindNoncePoints.size() != generatedComponents.getComponents().size()) {
                 System.out.println("Error! Mismatched size! " + blindNoncePoints.size() + " vs. " + generatedComponents.getComponents().size());
-                return false;
+                return RoundStatus.FALSE;
             }
 
             ArrayList<ByteString> blindSignatureRequestsByteString = new ArrayList<>();
@@ -525,9 +538,10 @@ public class FusionClient {
 
             Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(5);
             if(blindSigServerMessage == null) {
-                System.out.println("blindsigmsg is null");
-                return false;
+                System.out.println("blindSigServerMessage1 is null");
+                return RoundStatus.FALSE;
             }
+
             if(blindSigServerMessage.hasBlindsigresponses()) {
                 System.out.println("Has blindsigresponse msg");
                 Fusion.BlindSigResponses blindSigResponses = blindSigServerMessage.getBlindsigresponses();
@@ -538,7 +552,7 @@ public class FusionClient {
 
                 if(scalars.size() != blindSignatureRequests.size()) {
                     System.out.println("scalars != blindSigRequests: " + scalars.size() + " vs. " + blindSignatureRequests.size());
-                    return false;
+                    return RoundStatus.FALSE;
                 }
 
                 ArrayList<byte[]> blindSigs = new ArrayList<>();
@@ -586,11 +600,11 @@ public class FusionClient {
                             int index = allCommitments.indexOf(commitment);
                             if(index == -1) {
                                 System.out.println("missing commitment");
-                                return false;
+                                return RoundStatus.FALSE;
                             }
                         } catch(Exception e) {
                             System.out.println("missing commitment");
-                            return false;
+                            return RoundStatus.FALSE;
                         }
                     }
 
@@ -605,7 +619,7 @@ public class FusionClient {
 
                         if(covertClock() > 20) {
                             System.out.println("Shared components message arrived too slowly.");
-                            return false;
+                            return RoundStatus.FALSE;
                         }
 
                         for(ByteString component : myComponents) {
@@ -613,11 +627,11 @@ public class FusionClient {
                                 int index = allComponents.indexOf(component);
                                 if(index == -1) {
                                     System.out.println("missing component");
-                                    return false;
+                                    return RoundStatus.FALSE;
                                 }
                             } catch(Exception e) {
                                 System.out.println("missing component");
-                                return false;
+                                return RoundStatus.FALSE;
                             }
                         }
 
@@ -625,7 +639,7 @@ public class FusionClient {
                         ByteString sessionHashBs = ByteString.copyFrom(this.sessionHash);
                         if(!msgSessionHash.equals(sessionHashBs)) {
                             System.out.println("Session hashes do not match!");
-                            return false;
+                            return RoundStatus.FALSE;
                         }
 
                         if(!skipSignatures) {
@@ -672,16 +686,22 @@ public class FusionClient {
                             covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20);
                             Fusion.FusionResult result = this.receiveMessage(20).getFusionresult();
                             System.out.println("result: " + result);
-                            return result.getOk();
+                            return result.getOk() ? RoundStatus.TRUE : RoundStatus.FALSE;
                         } else {
-                            return false;
+                            return RoundStatus.FALSE;
                         }
                     }
                 }
+
+                return RoundStatus.FALSE;
+            } else {
+                System.out.println("ROUND MESSAGE: ");
+                System.out.println(blindSigServerMessage);
+                return RoundStatus.FALSE;
             }
         }
 
-        return false;
+        return RoundStatus.FALSE;
     }
 
     private GeneratedComponents genComponents(long numBlanks, ArrayList<Pair<TransactionOutput, ECKey>> inputs, ArrayList<Pair<Script, Long>> outputs, long componentFeeRate) {
