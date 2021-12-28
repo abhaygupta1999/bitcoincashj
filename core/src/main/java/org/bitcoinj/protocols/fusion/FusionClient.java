@@ -420,6 +420,12 @@ public class FusionClient {
 
     private boolean runRound(CovertSubmitter covertSubmitter) throws IOException {
         Fusion.ServerMessage serverMessage = receiveMessage((2 * WARMUP_SLOP + STANDARD_TIMEOUT));
+
+        if(serverMessage == null) {
+            System.out.println("Could not receive message!");
+            return false;
+        }
+
         if(serverMessage.hasStartround()) {
             Fusion.StartRound startRound = serverMessage.getStartround();
             covertT0 = System.currentTimeMillis()/1000L;
