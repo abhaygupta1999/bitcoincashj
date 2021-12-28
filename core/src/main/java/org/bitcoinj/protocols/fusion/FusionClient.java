@@ -21,6 +21,10 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.*;
 import java.math.BigInteger;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -64,8 +68,12 @@ public class FusionClient {
     private long covertT0 = 0;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
+        SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
+        Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
+        Socket tunnel = new Socket(proxy);
+        tunnel.connect(new InetSocketAddress(host, port));
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
-        SSLSocket socket = (SSLSocket)factory.createSocket(host, port);
+        SSLSocket socket = (SSLSocket)factory.createSocket(tunnel, host, port, true);
         socket.setTcpNoDelay(true);
         socket.setKeepAlive(true);
         socket.setUseClientMode(true);
@@ -688,11 +696,17 @@ public class FusionClient {
                             System.out.println("result: " + result);
                             return result.getOk() ? RoundStatus.TRUE : RoundStatus.FALSE;
                         } else {
+                            System.out.println("SKipping signatures");
                             return RoundStatus.FALSE;
                         }
+                    } else {
+                        System.out.println("SHARE COMPONENT MESSAGE: ");
+                        System.out.println(shareCovertComponentsServerMsg);
                     }
+                } else {
+                    System.out.println("ALL COMMITMENT MESSAGE: ");
+                    System.out.println(allCommitmentsServerMsg);
                 }
-
             } else {
                 System.out.println("ROUND MESSAGE: ");
                 System.out.println(blindSigServerMessage);
