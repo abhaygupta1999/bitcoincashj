@@ -19,8 +19,8 @@ public class PedersenTests {
 
         BigInteger sumnonce = (commit0.getNonce().add(commit5.getNonce()).add(commit10m.getNonce())).mod(order);
 
-        Pedersen.Commitment sumA = Pedersen.addCommitments(commit0, commit5, commit10m);
-        Pedersen.Commitment sumB = new Pedersen.Commitment(setup, BigInteger.valueOf(-5), sumnonce);
+        Pedersen.Commitment sumA = setup.addCommitments(commit0, commit5, commit10m);
+        Pedersen.Commitment sumB = new Pedersen.Commitment(setup, BigInteger.valueOf(-5), sumnonce, null);
 
         assertEquals(sumA.getAmount(), sumB.getAmount());
         assertEquals(sumA.getAmountMod(), sumB.getAmountMod());

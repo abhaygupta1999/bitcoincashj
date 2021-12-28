@@ -1,6 +1,7 @@
 package org.bitcoinj.protocols.fusion;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import fusion.Fusion;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -12,6 +13,7 @@ import org.bitcoinj.protocols.fusion.models.GeneratedComponents;
 import org.bitcoinj.protocols.fusion.models.Tier;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.script.ScriptOpCodes;
 import org.bitcoinj.wallet.Wallet;
 import org.bouncycastle.util.encoders.Hex;
 import javax.net.ssl.SSLSocket;
@@ -19,11 +21,13 @@ import javax.net.ssl.SSLSocketFactory;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.*;
 
 public class FusionClient {
     private final int STANDARD_TIMEOUT = 3;
+    private final int WARMUP_TIME = 30;
     private final int WARMUP_SLOP = 3;
     private final long MIN_OUTPUT = 10000;
     private final long MAX_CLOCK_DISCREPANCY = 5;
@@ -50,6 +54,12 @@ public class FusionClient {
     private long maxExcessFee;
     private ArrayList<Tier> availableTiers;
     private long tier;
+
+    private byte[] lastHash;
+
+    //TIME VARIABLES
+    private long tFusionBegin = 0;
+    private long covertT0 = 0;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
@@ -92,13 +102,23 @@ public class FusionClient {
         System.out.println("sent: " + Hex.toHexString(bos.toByteArray()));
     }
 
-    public Fusion.ServerMessage receiveMessage(int timeout) throws IOException {
-        this.socket.setSoTimeout(timeout);
-        byte[] prefixBytes = in.readNBytes(12);
-        if(prefixBytes.length == 0) return null;
-        byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
-        int bufferSize = new BigInteger(sizeBytes).intValue();
-        return Fusion.ServerMessage.parseFrom(in.readNBytes(bufferSize));
+    public Fusion.ServerMessage receiveMessage(int timeout) {
+        int maxTime = (int)(System.currentTimeMillis()/1000)+timeout;
+        while(true) {
+            try {
+                int remTime = maxTime-(int)(System.currentTimeMillis()/1000);
+                if(remTime < 0) {
+                    return null;
+                }
+                this.socket.setSoTimeout(remTime*1000);
+                byte[] prefixBytes = in.readNBytes(12);
+                if (prefixBytes.length == 0) return null;
+                byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
+                int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
+                return Fusion.ServerMessage.parseFrom(in.readNBytes(bufferSize));
+            } catch (Exception e) {
+            }
+        }
     }
 
     public SSLSocket getSocket() {
@@ -122,7 +142,7 @@ public class FusionClient {
                 .build();
         //send message to server
         this.sendMessage(clientMessage);
-        Fusion.ServerMessage serverMessage = this.receiveMessage(5000);
+        Fusion.ServerMessage serverMessage = this.receiveMessage(5);
 
         //check if message received is serverhello type
         if(serverMessage.hasServerhello()) {
@@ -252,10 +272,7 @@ public class FusionClient {
         }
 
         ArrayList<Double> cumSum = runningSum(values);
-        double sum = 0;
-        for(double val : values) {
-            sum += val;
-        }
+        double sum = cumSum.get(cumSum.size()-1);
 
         double rescale = desiredRandomSum / sum;
         ArrayList<Long> normedCumSum = new ArrayList<>();
@@ -307,6 +324,7 @@ public class FusionClient {
                 .build();
         try {
             this.sendMessage(clientMessage);
+            System.out.println("inputs: " + this.inputs);
             System.out.println("Registered for tiers.");
 
             new Thread() {
@@ -315,20 +333,39 @@ public class FusionClient {
                     Fusion.ServerMessage serverMessage;
                     while(true) {
                         System.out.println("waiting...");
-                        try {
-                            serverMessage = receiveMessage(10000);
-                            if(serverMessage != null) {
-                                if(serverMessage.hasFusionbegin()) {
-                                    System.out.println("STARTING FUSION!");
-                                    break;
+                        serverMessage = receiveMessage(10);
+                        if(serverMessage != null) {
+                            if(serverMessage.hasFusionbegin()) {
+                                System.out.println("STARTING FUSION!");
+                                break;
+                            } else if(serverMessage.hasTierstatusupdate()) {
+                                Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
+                                for(long tier : tierOutputs.keySet()) {
+                                    Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
+                                    double percent = (double)status.getPlayers() / (double)status.getMinPlayers();
+                                    int pct = (int)(percent*100);
+                                    if(pct < 100) {
+                                        System.out.println(tier + ":" + pct);
+                                    } else {
+                                        System.out.println("tier " + tier + " starting in " + status.getTimeRemaining());
+                                    }
                                 }
                             }
-                        } catch (IOException ignored) {
                         }
                     }
 
                     if(serverMessage.hasFusionbegin()) {
-                        startCovert(serverMessage);
+                        CovertSubmitter covertSubmitter = startCovert(serverMessage);
+
+                        while(true) {
+                            try {
+                                if(runRound(covertSubmitter))
+                                    break;
+                            } catch(Exception e) {
+                                e.printStackTrace();
+                                break;
+                            }
+                        }
                     }
                 }
             }.start();
@@ -337,8 +374,10 @@ public class FusionClient {
         }
     }
 
-    private void startCovert(Fusion.ServerMessage serverMessage) {
+    private CovertSubmitter startCovert(Fusion.ServerMessage serverMessage) {
+        // TODO TIMING IS CRITICAL - MESSAGE 2
         Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
+        tFusionBegin = System.currentTimeMillis()/1000L;
         this.tier = fusionBegin.getTier();
         ArrayList<Long> outputs = tierOutputs.get(this.tier);
         for(long output : outputs) {
@@ -350,138 +389,226 @@ public class FusionClient {
         System.out.println(fusionBegin);
         System.out.println("covert domain: " + fusionBegin.getCovertDomain().toStringUtf8());
 
-        this.runRound();
-    }
+        String covertDomain = fusionBegin.getCovertDomain().toString(StandardCharsets.US_ASCII);
+        int covertPort = fusionBegin.getCovertPort();
 
-    private void runRound() {
         try {
-            Fusion.ServerMessage serverMessage = this.receiveMessage((2 * WARMUP_SLOP + STANDARD_TIMEOUT)*1000);
-            if(serverMessage.hasStartround()) {
-                Fusion.StartRound startRound = serverMessage.getStartround();
-                long roundTime = startRound.getServerTime();
-                long ourTime = System.currentTimeMillis() / 1000;
-                System.out.println("roundtime: " + roundTime);
-                System.out.println("ourtime: " + ourTime);
-
-                long clockMismatch = roundTime - ourTime;
-                if (Math.abs(clockMismatch) > clockMismatch) {
-                    return;
-                }
-
-                long inputFees = 0;
-                for(Pair<TransactionOutput, ECKey> pair : this.inputs) {
-                    inputFees += componentFee(sizeOfInput(pair.getRight().getPubKey()), this.componentFeeRate);
-                }
-
-                long outputFees = this.tierOutputs.get(tier).size() * componentFee(34, this.componentFeeRate);
-
-                long sumIn = 0;
-                for(Pair<TransactionOutput, ECKey> pair : this.inputs) {
-                    sumIn += pair.getLeft().getValue().value;
-                }
-
-                long sumOut = 0;
-                for(long output : this.tierOutputs.get(this.tier)) {
-                    sumOut += output;
-                }
-
-                long totalFee = sumIn - sumOut;
-                long excessFee = totalFee - inputFees - outputFees;
-
-                byte[] roundPubKey = startRound.getRoundPubkey().toByteArray();
-                List<ByteString> blindNoncePoints = startRound.getBlindNoncePointsList();
-
-                if(blindNoncePoints.size() != this.numComponents) {
-                    System.out.println("blind nonce miscount");
-                    return;
-                }
-
-                long numBlanks = this.numComponents - this.inputs.size() - this.tierOutputs.get(this.tier).size();
-
-                GeneratedComponents generatedComponents = genComponents(numBlanks, this.inputs, this.outputs, componentFeeRate);
-                if(!BigInteger.valueOf(excessFee).equals(generatedComponents.getSumAmounts())) {
-                    System.out.println("excess fee does not equal pedersen amount");
-                    return;
-                }
-                if(blindNoncePoints.size() != generatedComponents.getComponents().size()) {
-                    System.out.println("Error! Mismatched size! " + blindNoncePoints.size() + " vs. " + generatedComponents.getComponents().size());
-                    return;
-                }
-
-                ArrayList<ByteString> blindSignatureRequestsByteString = new ArrayList<>();
-                ArrayList<SchnorrBlindSignatureRequest> blindSignatureRequests = new ArrayList<>();
-                for(int x = 0; x < blindNoncePoints.size(); x++) {
-                    byte[] R = blindNoncePoints.get(x).toByteArray();
-                    byte[] compSer = generatedComponents.getComponents().get(x).getCompSer();
-                    SchnorrBlindSignatureRequest schnorrBlindSignatureRequest = new SchnorrBlindSignatureRequest(roundPubKey, R, Sha256Hash.hash(compSer));
-                    blindSignatureRequestsByteString.add(ByteString.copyFrom(schnorrBlindSignatureRequest.getRequest()));
-                    blindSignatureRequests.add(schnorrBlindSignatureRequest);
-                }
-
-                ArrayList<ByteString> myCommitments = new ArrayList<>();
-                for(Component component : generatedComponents.getComponents()) {
-                    ByteString byteString = ByteString.copyFrom(component.getCommitSer());
-                    myCommitments.add(byteString);
-                }
-
-                ArrayList<ByteString> myComponents = new ArrayList<>();
-                for(Component component : generatedComponents.getComponents()) {
-                    ByteString byteString = ByteString.copyFrom(component.getCompSer());
-                    myComponents.add(byteString);
-                }
-
-                byte[] randomNumber = new SecureRandom().generateSeed(32);
-
-                Fusion.PlayerCommit playerCommit = Fusion.PlayerCommit.newBuilder()
-                        .setRandomNumberCommitment(ByteString.copyFrom(Sha256Hash.hash(randomNumber)))
-                        .setPedersenTotalNonce(ByteString.copyFrom(generatedComponents.getPedersenTotalNonce()))
-                        .setExcessFee(excessFee)
-                        .addAllInitialCommitments(myCommitments)
-                        .addAllBlindSigRequests(blindSignatureRequestsByteString)
-                        .build();
-                Fusion.ClientMessage clientMessage = Fusion.ClientMessage.newBuilder()
-                        .setPlayercommit(playerCommit)
-                        .build();
-                this.sendMessage(clientMessage);
-
-                Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(5000);
-
-                if(blindSigServerMessage.hasBlindsigresponses()) {
-                    Fusion.BlindSigResponses blindSigResponses = blindSigServerMessage.getBlindsigresponses();
-                    ArrayList<byte[]> scalars = new ArrayList<>();
-                    for(ByteString sByteString : blindSigResponses.getScalarsList()) {
-                        scalars.add(sByteString.toByteArray());
-                    }
-
-                    ArrayList<byte[]> blindSigs = new ArrayList<>();
-                    for(int x = 0; x < scalars.size(); x++) {
-                        SchnorrBlindSignatureRequest r = blindSignatureRequests.get(x);
-                        byte[] sig = r.blindFinalize(scalars.get(x));
-                        blindSigs.add(sig);
-                    }
-
-                    ArrayList<Fusion.CovertComponent> covertComponents = new ArrayList<>();
-                    for(int x = 0; x < blindSigs.size(); x++) {
-                        ByteString component = myComponents.get(x);
-                        byte[] sig = blindSigs.get(x);
-                        Fusion.CovertComponent covertComponent = Fusion.CovertComponent.newBuilder()
-                                .setRoundPubkey(ByteString.copyFrom(roundPubKey))
-                                .setComponent(component)
-                                .setSignature(ByteString.copyFrom(sig))
-                                .build();
-                        covertComponents.add(covertComponent);
-                    }
-                    System.out.println("blindsigresponse::");
-                    System.out.println(blindSigResponses);
-                }
-            }
+            this.lastHash = calcInitialHash(this.tier, covertDomain, covertPort, fusionBegin.getServerTime());
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        CovertSubmitter covertSubmitter = new CovertSubmitter(covertDomain, covertPort, this.numComponents, 6);
+        covertSubmitter.scheduleConnections();
+
+        long tend = tFusionBegin + (WARMUP_TIME - WARMUP_SLOP - 1);
+
+        while((System.currentTimeMillis()/1000L) < tend) {
+            long remTime = tend-(System.currentTimeMillis()/1000L);
+            System.out.println("Waiting for startround... " + remTime);
+        }
+
+        return covertSubmitter;
+    }
+
+    private boolean runRound(CovertSubmitter covertSubmitter) throws IOException {
+        Fusion.ServerMessage serverMessage = receiveMessage((2 * WARMUP_SLOP + STANDARD_TIMEOUT));
+        if(serverMessage.hasStartround()) {
+            Fusion.StartRound startRound = serverMessage.getStartround();
+            covertT0 = System.currentTimeMillis()/1000L;
+            long roundTime = startRound.getServerTime();
+            System.out.println("roundtime: " + roundTime);
+            System.out.println("ourtime: " + covertT0);
+
+            long clockMismatch = roundTime - covertT0;
+            if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
+                return false;
+            }
+
+            if(tFusionBegin != 0) {
+                long lag = covertT0 - tFusionBegin - WARMUP_TIME;
+                if(Math.abs(lag) > WARMUP_SLOP) {
+                    System.out.println("Warmup period too different from expectation");
+                    return false;
+                }
+                this.tFusionBegin = 0;
+            }
+
+            long inputFees = 0;
+            for(Pair<TransactionOutput, ECKey> pair : this.inputs) {
+                inputFees += componentFee(sizeOfInput(pair.getRight().getPubKey()), this.componentFeeRate);
+            }
+
+            long outputFees = this.tierOutputs.get(tier).size() * componentFee(34, this.componentFeeRate);
+
+            long sumIn = 0;
+            for(Pair<TransactionOutput, ECKey> pair : this.inputs) {
+                sumIn += pair.getLeft().getValue().value;
+            }
+
+            long sumOut = 0;
+            for(long output : this.tierOutputs.get(this.tier)) {
+                sumOut += output;
+            }
+
+            long totalFee = sumIn - sumOut;
+            long excessFee = totalFee - inputFees - outputFees;
+
+            byte[] roundPubKey = startRound.getRoundPubkey().toByteArray();
+            List<ByteString> blindNoncePoints = startRound.getBlindNoncePointsList();
+
+            if(blindNoncePoints.size() != this.numComponents) {
+                System.out.println("blind nonce miscount");
+                return false;
+            }
+
+            long numBlanks = this.numComponents - this.inputs.size() - this.tierOutputs.get(this.tier).size();
+
+            GeneratedComponents generatedComponents = genComponents(numBlanks, this.inputs, this.outputs, componentFeeRate);
+            if(!BigInteger.valueOf(excessFee).equals(generatedComponents.getSumAmounts())) {
+                System.out.println("excess fee does not equal pedersen amount");
+                return false;
+            }
+            if(blindNoncePoints.size() != generatedComponents.getComponents().size()) {
+                System.out.println("Error! Mismatched size! " + blindNoncePoints.size() + " vs. " + generatedComponents.getComponents().size());
+                return false;
+            }
+
+            ArrayList<ByteString> blindSignatureRequestsByteString = new ArrayList<>();
+            ArrayList<SchnorrBlindSignatureRequest> blindSignatureRequests = new ArrayList<>();
+            for(int x = 0; x < blindNoncePoints.size(); x++) {
+                byte[] R = blindNoncePoints.get(x).toByteArray();
+                byte[] compSer = generatedComponents.getComponents().get(x).getCompSer();
+                SchnorrBlindSignatureRequest schnorrBlindSignatureRequest = new SchnorrBlindSignatureRequest(roundPubKey, R, Sha256Hash.hash(compSer));
+                blindSignatureRequestsByteString.add(ByteString.copyFrom(schnorrBlindSignatureRequest.getRequest()));
+                blindSignatureRequests.add(schnorrBlindSignatureRequest);
+            }
+
+            ArrayList<ByteString> myCommitments = new ArrayList<>();
+            for(Component component : generatedComponents.getComponents()) {
+                ByteString byteString = ByteString.copyFrom(component.getCommitSer());
+                myCommitments.add(byteString);
+            }
+
+            ArrayList<ByteString> myComponents = new ArrayList<>();
+            for(Component component : generatedComponents.getComponents()) {
+                ByteString byteString = ByteString.copyFrom(component.getCompSer());
+                myComponents.add(byteString);
+            }
+
+            byte[] randomNumber = new SecureRandom().generateSeed(32);
+
+            Fusion.PlayerCommit playerCommit = Fusion.PlayerCommit.newBuilder()
+                    .setRandomNumberCommitment(ByteString.copyFrom(Sha256Hash.hash(randomNumber)))
+                    .setPedersenTotalNonce(ByteString.copyFrom(generatedComponents.getPedersenTotalNonce()))
+                    .setExcessFee(excessFee)
+                    .addAllInitialCommitments(myCommitments)
+                    .addAllBlindSigRequests(blindSignatureRequestsByteString)
+                    .build();
+            Fusion.ClientMessage clientMessage = Fusion.ClientMessage.newBuilder()
+                    .setPlayercommit(playerCommit)
+                    .build();
+            this.sendMessage(clientMessage);
+
+            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(5);
+            if(blindSigServerMessage == null) {
+                System.out.println("blindsigmsg is null");
+                return false;
+            }
+            if(blindSigServerMessage.hasBlindsigresponses()) {
+                System.out.println("Has blindsigresponse msg");
+                Fusion.BlindSigResponses blindSigResponses = blindSigServerMessage.getBlindsigresponses();
+                ArrayList<byte[]> scalars = new ArrayList<>();
+                for(ByteString sByteString : blindSigResponses.getScalarsList()) {
+                    scalars.add(sByteString.toByteArray());
+                }
+
+                if(scalars.size() != blindSignatureRequests.size()) {
+                    System.out.println("scalars != blindSigRequests: " + scalars.size() + " vs. " + blindSignatureRequests.size());
+                    return false;
+                }
+
+                ArrayList<byte[]> blindSigs = new ArrayList<>();
+                for(int x = 0; x < scalars.size(); x++) {
+                    SchnorrBlindSignatureRequest r = blindSignatureRequests.get(x);
+                    byte[] sig = r.blindFinalize(scalars.get(x));
+                    blindSigs.add(sig);
+                }
+
+                long remTime = 5 - covertClock();
+                if(remTime < 0) {
+                    System.out.println("Arrived at covert-component phase too slowly.");
+                }
+                System.out.println("Remtime: " + remTime);
+                try {
+                    Thread.sleep(remTime*1000L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                ArrayList<Fusion.CovertMessage> covertMessages = new ArrayList<>();
+                for(int x = 0; x < blindSigs.size(); x++) {
+                    ByteString component = myComponents.get(x);
+                    byte[] sig = blindSigs.get(x);
+                    Fusion.CovertComponent covertComponent = Fusion.CovertComponent.newBuilder()
+                            .setRoundPubkey(ByteString.copyFrom(roundPubKey))
+                            .setComponent(component)
+                            .setSignature(ByteString.copyFrom(sig))
+                            .build();
+                    Fusion.CovertMessage covertMessage = Fusion.CovertMessage.newBuilder()
+                            .setComponent(covertComponent)
+                            .build();
+                    covertMessages.add(covertMessage);
+                }
+
+                covertSubmitter.scheduleSubmissions(covertMessages, covertT0 + 5);
+
+                Fusion.ServerMessage allCommitmentsServerMsg = this.receiveMessage(+20);
+                if(allCommitmentsServerMsg.hasAllcommitments()) {
+                    System.out.println("Has all commitments msg");
+                    Fusion.AllCommitments allCommitmentsMsg = allCommitmentsServerMsg.getAllcommitments();
+                    List<ByteString> allCommitments = allCommitmentsMsg.getInitialCommitmentsList();
+
+                    ArrayList<Integer> myCommitmentIndexes = new ArrayList<>();
+                    for(ByteString commitment : myCommitments) {
+                        try {
+                            int index = allCommitments.indexOf(commitment);
+                            myCommitmentIndexes.add(index);
+                        } catch(Exception e) {
+                            System.out.println("missing component");
+                            return false;
+                        }
+                    }
+
+                    Fusion.ServerMessage shareCovertComponentsServerMsg = this.receiveMessage(+20);
+                    if(shareCovertComponentsServerMsg.hasSharecovertcomponents()) {
+                        Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
+                        System.out.println("SHARE COVERT COMPONENTS::");
+                        System.out.println(shareCovertComponentsMsg);
+                        List<ByteString> allComponents = shareCovertComponentsMsg.getComponentsList();
+                        boolean skipSignatures = shareCovertComponentsMsg.getSkipSignatures();
+
+                        ArrayList<Integer> myComponentIndexes = new ArrayList<>();
+                        for(ByteString component : allComponents) {
+                            try {
+                                int index = allComponents.indexOf(component);
+                                myComponentIndexes.add(index);
+                            } catch(Exception e) {
+                                System.out.println("missing component");
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private GeneratedComponents genComponents(long numBlanks, ArrayList<Pair<TransactionOutput, ECKey>> inputs, ArrayList<Pair<Script, Long>> outputs, long componentFeeRate) {
-        ArrayList<Pair<Fusion.Component, Long>> components = new ArrayList<>();
+        ArrayList<Pair<Fusion.Component.Builder, Long>> components = new ArrayList<>();
 
         //inputs
         for(Pair<TransactionOutput, ECKey> pair : inputs) {
@@ -493,9 +620,8 @@ public class FusionClient {
                     .setPubkey(ByteString.copyFrom(pair.getRight().getPubKey()))
                     .setAmount(value)
                     .build();
-            Fusion.Component component = Fusion.Component.newBuilder()
-                    .setInput(inputComponent)
-                    .build();
+            Fusion.Component.Builder component = Fusion.Component.newBuilder()
+                    .setInput(inputComponent);
             components.add(Pair.of(component, +value-fee));
         }
 
@@ -507,18 +633,16 @@ public class FusionClient {
                     .setAmount(value)
                     .setScriptpubkey(ByteString.copyFrom(pair.getLeft().getProgram()))
                     .build();
-            Fusion.Component component = Fusion.Component.newBuilder()
-                    .setOutput(outputComponent)
-                    .build();
-            components.add(Pair.of(component, +value-fee));
+            Fusion.Component.Builder component = Fusion.Component.newBuilder()
+                    .setOutput(outputComponent);
+            components.add(Pair.of(component, -value-fee));
         }
 
         for(int x = 0; x < numBlanks; x++) {
             Fusion.BlankComponent blankComponent = Fusion.BlankComponent.newBuilder()
                     .build();
-            Fusion.Component component = Fusion.Component.newBuilder()
-                    .setBlank(blankComponent)
-                    .build();
+            Fusion.Component.Builder component = Fusion.Component.newBuilder()
+                    .setBlank(blankComponent);
             components.add(Pair.of(component, 0L));
         }
 
@@ -527,11 +651,11 @@ public class FusionClient {
         BigInteger sumAmounts = BigInteger.ZERO;
         //gen commitments
         int cNum = 0;
-        for(Pair<Fusion.Component, Long> pair : components) {
+        for(Pair<Fusion.Component.Builder, Long> pair : components) {
             cNum++;
             long commitAmount = pair.getRight();
             byte[] salt = new SecureRandom().generateSeed(32);
-            Fusion.Component modifiedComponent = pair.getLeft().toBuilder().setSaltCommitment(ByteString.copyFrom(Sha256Hash.hash(salt))).build();
+            Fusion.Component modifiedComponent = pair.getLeft().setSaltCommitment(ByteString.copyFrom(Sha256Hash.hash(salt))).build();
             byte[] compSer = modifiedComponent.toByteArray();
 
             try {
@@ -547,12 +671,14 @@ public class FusionClient {
                         .build();
 
                 byte[] commitSer = initialCommitment.toByteArray();
-                Fusion.Proof proof = Fusion.Proof.newBuilder()
+                ByteBuffer pedersonNonceBuffer = ByteBuffer.allocate(32);
+                pedersonNonceBuffer.put(commitment.getNonce().toByteArray());
+                byte[] pedersonNonce = pedersonNonceBuffer.array();
+                Fusion.Proof.Builder proofBuilder = Fusion.Proof.newBuilder()
                         .setSalt(ByteString.copyFrom(salt))
-                        .setPedersenNonce(ByteString.copyFrom(commitment.getNonce().toByteArray()))
-                        .build();
+                        .setPedersenNonce(ByteString.copyFrom(pedersonNonce));
 
-                resultList.add(new Component(commitSer, cNum, compSer, proof, ecKey));
+                resultList.add(new Component(commitSer, cNum, compSer, proofBuilder, ecKey));
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -561,7 +687,9 @@ public class FusionClient {
         Collections.sort(resultList);
 
         sumNonce = sumNonce.mod(pedersen.getOrder());
-        byte[] pedersenTotalNonce = sumNonce.toByteArray();
+        ByteBuffer pedersonTotalNonceBuffer = ByteBuffer.allocate(32);
+        pedersonTotalNonceBuffer.put(sumNonce.toByteArray());
+        byte[] pedersenTotalNonce = pedersonTotalNonceBuffer.array();
 
         return new GeneratedComponents(resultList, sumAmounts, pedersenTotalNonce);
     }
@@ -603,5 +731,79 @@ public class FusionClient {
             }
         }
         return zipped;
+    }
+
+    public byte[] calcInitialHash(long tier, String covertDomain, int covertPort, long beginTime) throws IOException {
+        UnsafeByteArrayOutputStream hashBos = new UnsafeByteArrayOutputStream();
+        byte[] tag = "Cash Fusion Session".getBytes();
+        addToBos(hashBos, tag);
+        byte[] version = "alpha13".getBytes();
+        addToBos(hashBos, version);
+        ByteBuffer tierBuffer = ByteBuffer.allocate(8);
+        tierBuffer.putLong(tier);
+        byte[] tierBytes = tierBuffer.array();
+        addToBos(hashBos, tierBytes);
+        byte[] domainBytes = covertDomain.getBytes();
+        addToBos(hashBos, domainBytes);
+        ByteBuffer portBuffer = ByteBuffer.allocate(4);
+        portBuffer.putInt(covertPort);
+        byte[] portBytes = portBuffer.array();
+        addToBos(hashBos, portBytes);
+        byte[] ssl = Hex.decode("00");
+        addToBos(hashBos, ssl);
+        ByteBuffer timeBuffer = ByteBuffer.allocate(8);
+        timeBuffer.putLong(beginTime);
+        byte[] timeBytes = timeBuffer.array();
+        addToBos(hashBos, timeBytes);
+        return Sha256Hash.hash(hashBos.toByteArray());
+    }
+
+    public void addToBos(UnsafeByteArrayOutputStream bos, byte[] bytes) throws IOException {
+        ByteBuffer sizeBuffer = ByteBuffer.allocate(4); //4 byte prefix with size of next data
+        sizeBuffer.putInt(bytes.length);
+        bos.write(sizeBuffer.array());
+        bos.write(bytes);
+    }
+
+    public long covertClock() {
+        return (System.currentTimeMillis()/1000L) - covertT0;
+    }
+
+    public Transaction constructTransaction(List<ByteString> components, byte[] sessionHash) throws InvalidProtocolBufferException {
+        Transaction tx = new Transaction(wallet.getParams());
+        tx.setVersion(1);
+        tx.setLockTime(0);
+        Script opReturnScript = new ScriptBuilder().op(ScriptOpCodes.OP_RETURN)
+                .data(Hex.decode("46555a0020"))
+                .data(sessionHash)
+                .build();
+        tx.addOutput(Coin.ZERO, opReturnScript);
+        for(ByteString compSer : components) {
+            Fusion.Component component = Fusion.Component.parseFrom(compSer);
+            switch(component.getComponentCase()) {
+                case INPUT:
+                    Fusion.InputComponent inputComponent = component.getInput();
+                    Coin inputAmount = Coin.valueOf(inputComponent.getAmount());
+                    Address address = ECKey.fromPublicOnly(inputComponent.getPubkey().toByteArray()).toAddress(wallet.getParams());
+                    byte[] prevOutTxId = Sha256Hash.wrap(inputComponent.getPrevTxid().toByteArray()).getReversedBytes();
+                    TransactionOutPoint outpoint = new TransactionOutPoint(wallet.getParams(), inputComponent.getPrevIndex(), Sha256Hash.wrap(prevOutTxId));
+                    TransactionInput input = new TransactionInput(wallet.getParams(), null, ScriptBuilder.createEmpty().getProgram(), outpoint, inputAmount);
+                    input.setSequenceNumber(0xffffffff);
+                    tx.addInput(input);
+                    break;
+                case OUTPUT:
+                    Fusion.OutputComponent outputComponent = component.getOutput();
+                    Coin outputAmount = Coin.valueOf(outputComponent.getAmount());
+                    Script scriptPubKey = new Script(outputComponent.getScriptpubkey().toByteArray());
+                    tx.addOutput(outputAmount, scriptPubKey);
+                    break;
+                case BLANK:
+                    break;
+                case COMPONENT_NOT_SET:
+                    break;
+            }
+        }
+
+        return tx;
     }
 }

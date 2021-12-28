@@ -1,11 +1,16 @@
 package org.bitcoinj.crypto;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.bitcoinj.core.ECKey;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.encoders.Hex;
 
 import javax.annotation.Nullable;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 
 public class Pedersen {
@@ -26,22 +31,43 @@ public class Pedersen {
     }
 
     public Commitment commit(BigInteger amount) throws Exception {
-        return new Commitment(this, amount);
+        return new Commitment(this, amount, null);
     }
 
     public Commitment commit(long amount) throws Exception {
-        return new Commitment(this, BigInteger.valueOf(amount));
+        return new Commitment(this, BigInteger.valueOf(amount), null);
     }
 
     public Commitment commit(long amount, BigInteger nonce) throws Exception {
-        return new Commitment(this, BigInteger.valueOf(amount), nonce);
+        return new Commitment(this, BigInteger.valueOf(amount), nonce, null);
     }
 
     public BigInteger getOrder() {
         return order;
     }
 
-    public static Commitment addCommitments(Pedersen.Commitment... commitments) throws Exception {
+    public byte[] addPoints(List<byte[]> points) {
+        ArrayList<ECPoint> pList = new ArrayList<>();
+        for(byte[] pSer : points) {
+            pList.add(new LazyECPoint(ECKey.CURVE.getCurve(), pSer).get());
+        }
+
+        if(pList.isEmpty()) {
+            return null;
+        }
+
+        ArrayList<ECPoint> subPList = new ArrayList<>();
+        for(int x = 1; x < pList.size(); x++) {
+            subPList.add(pList.get(x));
+        }
+        ECPoint pSum = pList.get(0);
+        for(ECPoint point : subPList) {
+            pSum = pSum.add(point);
+        }
+        return pSum.getEncoded(false);
+    }
+
+    public Commitment addCommitments(Pedersen.Commitment... commitments) throws Exception {
         BigInteger kTotal = BigInteger.ZERO;
         long aTotal = 0;
         ArrayList<byte[]> points = new ArrayList<>();
@@ -60,11 +86,15 @@ public class Pedersen {
         Pedersen setup = setups.get(0);
         kTotal = kTotal.mod(order);
 
+        byte[] pUncompressed = null;
         if(points.size() < 512) {
-
+            try {
+                pUncompressed = addPoints(points);
+            }catch (Exception ignored) {
+            }
         }
 
-        return new Commitment(setup, BigInteger.valueOf(aTotal), kTotal);
+        return new Commitment(setup, BigInteger.valueOf(aTotal), kTotal, pUncompressed);
     }
 
     public static class Commitment {
@@ -76,29 +106,54 @@ public class Pedersen {
         private Pedersen setup;
 
         public Commitment(Pedersen setup, long amount) throws Exception {
-            this(setup, BigInteger.valueOf(amount));
+            this(setup, BigInteger.valueOf(amount), null);
         }
 
-        public Commitment(Pedersen setup, BigInteger amount) throws Exception {
+        public Commitment(Pedersen setup, BigInteger amount, @Nullable byte[] pUncompressed) throws Exception {
             this.setup = setup;
             this.amount = amount.longValue();
             this.amountMod = amount.mod(order);
             this.nonce = nextRandomBigInteger(order);
             if(nonce.compareTo(BigInteger.ZERO) < 0 || nonce.compareTo(order) > 0) {
-                System.out.println("fuck");
+                return;
+            }
+
+            if(pUncompressed != null) {
+                if(pUncompressed.length != 65) {
+                    throw new Exception("pUncompressed not 65 size");
+                }
+                if(pUncompressed[0] != 0x04) {
+                    throw new Exception("pUncompressed byte 0 is not 4");
+                }
+
+                this.pUncompressed = pUncompressed;
+                this.pCompressed = ECKey.fromPublicOnly(this.pUncompressed).getPubKeyPoint().getEncoded(true);
                 return;
             }
 
             calcInitial();
         }
 
-        public Commitment(Pedersen setup, BigInteger amount, BigInteger nonce) throws Exception {
+        public Commitment(Pedersen setup, BigInteger amount, BigInteger nonce, @Nullable byte[] pUncompressed) throws Exception {
             this.setup = setup;
             this.amount = amount.longValue();
             this.amountMod = amount.mod(order);
             this.nonce = nonce;
             if(nonce.compareTo(BigInteger.ZERO) < 0 || nonce.compareTo(order) > 0) {
                 throw new Exception("nonce out of range");
+            }
+
+            if(pUncompressed != null) {
+                if(pUncompressed.length != 65) {
+                    throw new Exception("pUncompressed not 65 size");
+                }
+                if(pUncompressed[0] != 0x04) {
+                    throw new Exception("pUncompressed byte 0 is not 4");
+                }
+
+                this.pUncompressed = pUncompressed;
+                this.pCompressed = ECKey.fromPublicOnly(this.pUncompressed).getPubKeyPoint().getEncoded(true);
+                return;
             }
 
             calcInitial();
@@ -120,11 +175,11 @@ public class Pedersen {
 
         private BigInteger nextRandomBigInteger(BigInteger n) {
             Random rand = new Random();
-            BigInteger result = new BigInteger(n.bitLength(), rand);
-            while( result.compareTo(n) >= 0 ) {
-                result = new BigInteger(n.bitLength(), rand);
-            }
-            return result;
+            BigInteger randomNumber;
+            do {
+                randomNumber = new BigInteger(n.bitLength()-8, rand);
+            } while (randomNumber.compareTo(n) >= 0);
+            return randomNumber;
         }
 
         public byte[] getpCompressed() {

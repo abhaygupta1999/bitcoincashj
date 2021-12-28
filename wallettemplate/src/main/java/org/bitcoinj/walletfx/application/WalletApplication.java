@@ -154,6 +154,8 @@ public abstract class WalletApplication implements AppDelegate {
         walletAppKit = new WalletAppKit(params, preferredOutputScriptType, null, appDataDirectory, walletFileName) {
             @Override
             protected void onSetupCompleted() {
+                wallet().setAcceptRiskyTransactions(true);
+                wallet().allowSpendingUnconfirmedTransactions();
                 Platform.runLater(controller::onBitcoinSetup);
 
                 new Thread() {

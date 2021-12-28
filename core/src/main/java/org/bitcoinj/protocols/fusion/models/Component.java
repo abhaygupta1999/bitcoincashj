@@ -11,15 +11,20 @@ public class Component implements Comparable<Component> {
     private byte[] commitSer;
     private int cNum;
     private byte[] compSer;
-    private Fusion.Proof proof;
+    private Fusion.Proof.Builder proof;
     private ECKey privKey;
 
-    public Component(byte[] commitSer, int cNum, byte[] compSer, Fusion.Proof proof, ECKey privKey) {
+    public Component(byte[] commitSer, int cNum, byte[] compSer, Fusion.Proof.Builder proof, ECKey privKey) {
         this.commitSer = commitSer;
         this.cNum = cNum;
         this.compSer = compSer;
         this.proof = proof;
         this.privKey = privKey;
+    }
+
+    public Fusion.Proof setComponentIdx(int value) {
+        this.proof.setComponentIdx(value);
+        return this.proof.build();
     }
 
     public byte[] getCompSer() {

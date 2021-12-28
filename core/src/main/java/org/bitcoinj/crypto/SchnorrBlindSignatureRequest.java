@@ -10,7 +10,7 @@ import java.math.BigInteger;
 import java.util.Random;
 
 public class SchnorrBlindSignatureRequest {
-    protected static final BigInteger order = ECKey.CURVE.getN();
+    protected static final BigInteger order = new BigInteger("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16);
     protected static final BigInteger fieldSize = new BigInteger("115792089237316195423570985008687907853269984665640564039457584007908834671663");
     private byte[] pubKey;
     private byte[] pubKeyCompressed;
@@ -53,7 +53,6 @@ public class SchnorrBlindSignatureRequest {
         BigInteger seven = BigInteger.valueOf(7);
         BigInteger three = BigInteger.valueOf(3);
 
-        System.out.println(n.and(BigInteger.ONE).equals(BigInteger.ONE));
         a = a.mod(n);
         BigInteger s = BigInteger.ONE;
         while(a.compareTo(BigInteger.ONE) > 0) {
