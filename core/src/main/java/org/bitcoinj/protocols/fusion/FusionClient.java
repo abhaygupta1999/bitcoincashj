@@ -345,9 +345,9 @@ public class FusionClient {
                                 for(long tier : tierOutputs.keySet()) {
                                     Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
                                     double percent = (double)status.getPlayers() / (double)status.getMinPlayers();
-                                    int pct = (int)(percent*100);
+                                    long pct = Math.round(percent*100);
                                     if(pct < 100) {
-                                        System.out.println(tier + ":" + pct);
+                                        System.out.println(tier + ": " + pct + "%");
                                     } else {
                                         System.out.println("tier " + tier + " starting in " + status.getTimeRemaining());
                                     }
