@@ -421,20 +421,24 @@ public class FusionClient {
                 public void run() {
                     Fusion.ServerMessage serverMessage;
                     while(true) {
-                        serverMessage = receiveMessage(10);
-                        if(serverMessage != null) {
-                            if(serverMessage.hasFusionbegin()) {
-                                System.out.println("STARTING FUSION!");
-                                break;
-                            } else if(serverMessage.hasTierstatusupdate()) {
-                                Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
-                                poolStatuses = new ArrayList<>();
-                                for(long tier : tierOutputs.keySet()) {
-                                    Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
-                                    PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
-                                    poolStatuses.add(poolStatus);
+                        if(socket != null) {
+                            serverMessage = receiveMessage(10);
+                            if (serverMessage != null) {
+                                if (serverMessage.hasFusionbegin()) {
+                                    System.out.println("STARTING FUSION!");
+                                    break;
+                                } else if (serverMessage.hasTierstatusupdate()) {
+                                    Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
+                                    poolStatuses = new ArrayList<>();
+                                    for (long tier : tierOutputs.keySet()) {
+                                        Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
+                                        PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
+                                        poolStatuses.add(poolStatus);
+                                    }
                                 }
                             }
+                        } else {
+                            fusionStatus = FusionStatus.FAILED;
                         }
                     }
 
