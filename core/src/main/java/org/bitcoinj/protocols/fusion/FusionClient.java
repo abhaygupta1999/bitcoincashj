@@ -68,7 +68,7 @@ public class FusionClient {
     public ArrayList<PoolStatus> poolStatuses = new ArrayList<>();
     public FusionStatus fusionStatus = FusionStatus.NOT_FUSING;
 
-    public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
+    public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet) throws IOException {
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
         SSLSocket socket = (SSLSocket)factory.createSocket(host, port);
         socket.setTcpNoDelay(true);
@@ -79,7 +79,7 @@ public class FusionClient {
         this.socket = socket;
         this.wallet = wallet;
         for(TransactionOutput coin : coins) {
-            ECKey key = this.wallet.findKeyFromAddress(coin.getAddressFromP2PKHScript(params));
+            ECKey key = this.wallet.findKeyFromAddress(coin.getAddressFromP2PKHScript(wallet.getParams()));
             this.coins.add(Pair.of(coin, key));
         }
         this.availableTiers = new ArrayList<>();
@@ -90,6 +90,29 @@ public class FusionClient {
         in = new BufferedInputStream(socket.getInputStream());
 
         greet();
+    }
+
+    public FusionClient updateUtxos(ArrayList<TransactionOutput> coins) throws IOException {
+        this.out.close();
+        this.in.close();
+        this.socket.close();
+        this.socket = null;
+        this.out = null;
+        this.in = null;
+        this.lastHash = null;
+        this.sessionHash = null;
+        this.tFusionBegin = 0;
+        this.covertT0 = 0;
+        this.tier = 0;
+        this.fusionStatus = FusionStatus.NOT_FUSING;
+        this.poolStatuses = new ArrayList<>();
+        this.availableTiers = new ArrayList<>();
+        this.coins = new ArrayList<>();
+        this.inputs = new ArrayList<>();
+        this.tierOutputs = new HashMap<>();
+        this.outputs = new ArrayList<>();
+
+        return new FusionClient(this.host, this.port, coins, this.wallet);
     }
 
     public void sendMessage(Fusion.ClientMessage clientMessage) throws IOException {
