@@ -69,7 +69,7 @@ public class FusionClient {
     public FusionStatus fusionStatus = FusionStatus.NOT_FUSING;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
-        SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
+        SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9050);
         Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
         Socket tunnel = new Socket(proxy);
         tunnel.connect(new InetSocketAddress(host, port));
