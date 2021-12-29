@@ -213,6 +213,9 @@ public class FusionClient {
         in.close();
         out.close();
         socket.close();
+        in = null;
+        out = null;
+        socket = null;
     }
 
     public void greet() throws IOException {
@@ -440,11 +443,12 @@ public class FusionClient {
 
                         while(true) {
                             try {
-                                RoundStatus status = runRound(covertSubmitter);
-                                if(status == RoundStatus.TRUE || status == RoundStatus.QUIT)
+                                FusionStatus status = runRound(covertSubmitter);
+                                if(status == FusionStatus.FUSED || status == FusionStatus.FAILED)
                                     break;
                             } catch(Exception e) {
                                 e.printStackTrace();
+                                fusionStatus = FusionStatus.FAILED;
                                 break;
                             }
                         }
@@ -457,7 +461,6 @@ public class FusionClient {
     }
 
     private CovertSubmitter startCovert(Fusion.ServerMessage serverMessage) {
-        // TODO TIMING IS CRITICAL - MESSAGE 2
         Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
         tFusionBegin = System.currentTimeMillis()/1000D;
         this.tier = fusionBegin.getTier();
@@ -467,9 +470,6 @@ public class FusionClient {
             Script script = ScriptBuilder.createOutputScript(address);
             this.outputs.add(Pair.of(script, output));
         }
-
-        System.out.println(fusionBegin);
-        System.out.println("covert domain: " + fusionBegin.getCovertDomain().toStringUtf8());
 
         String covertDomain = fusionBegin.getCovertDomain().toString(StandardCharsets.US_ASCII);
         int covertPort = fusionBegin.getCovertPort();
@@ -495,18 +495,13 @@ public class FusionClient {
         return covertSubmitter;
     }
 
-    public enum RoundStatus {
-        TRUE,
-        FALSE,
-        QUIT
-    }
-
-    private RoundStatus runRound(CovertSubmitter covertSubmitter) throws Exception {
+    private FusionStatus runRound(CovertSubmitter covertSubmitter) throws Exception {
         Fusion.ServerMessage serverMessage = receiveMessage((2 * WARMUP_SLOP + STANDARD_TIMEOUT));
 
         if(serverMessage == null) {
+            this.fusionStatus = FusionStatus.FAILED;
             System.out.println("Could not receive message!");
-            return RoundStatus.QUIT;
+            return FusionStatus.FAILED;
         }
 
         if(serverMessage.hasStartround()) {
@@ -518,14 +513,16 @@ public class FusionClient {
 
             double clockMismatch = roundTime - covertT0;
             if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
-                return RoundStatus.FALSE;
+                this.fusionStatus = FusionStatus.FAILED;
+                return FusionStatus.FAILED;
             }
 
             if(tFusionBegin != 0) {
                 double lag = covertT0 - tFusionBegin - WARMUP_TIME;
                 if(Math.abs(lag) > WARMUP_SLOP) {
+                    this.fusionStatus = FusionStatus.FAILED;
                     System.out.println("Warmup period too different from expectation");
-                    return RoundStatus.FALSE;
+                    return FusionStatus.FAILED;
                 }
                 this.tFusionBegin = 0;
             }
@@ -550,16 +547,18 @@ public class FusionClient {
             long totalFee = sumIn - sumOut;
             long excessFee = totalFee - inputFees - outputFees;
             if(excessFee > MAX_EXCESS_FEE) {
+                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("EXCESS FEE GREATER THAN MAX_EXCESS_FEE");
-                return RoundStatus.QUIT;
+                return FusionStatus.FAILED;
             }
 
             byte[] roundPubKey = startRound.getRoundPubkey().toByteArray();
             List<ByteString> blindNoncePoints = startRound.getBlindNoncePointsList();
 
             if(blindNoncePoints.size() != this.numComponents) {
+                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("blind nonce miscount");
-                return RoundStatus.FALSE;
+                return FusionStatus.FAILED;
             }
 
             long numBlanks = this.numComponents - this.inputs.size() - this.tierOutputs.get(this.tier).size();
@@ -567,12 +566,14 @@ public class FusionClient {
             this.fusionStatus = FusionStatus.GENERATING_COMPONENTS;
             GeneratedComponents generatedComponents = genComponents(numBlanks, this.inputs, this.outputs, componentFeeRate);
             if(!BigInteger.valueOf(excessFee).equals(generatedComponents.getSumAmounts())) {
+                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("excess fee does not equal pedersen amount");
-                return RoundStatus.FALSE;
+                return FusionStatus.FAILED;
             }
             if(blindNoncePoints.size() != generatedComponents.getComponents().size()) {
+                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("Error! Mismatched size! " + blindNoncePoints.size() + " vs. " + generatedComponents.getComponents().size());
-                return RoundStatus.FALSE;
+                return FusionStatus.FAILED;
             }
 
             this.fusionStatus = FusionStatus.MAKING_COMMITMENTS;
@@ -614,8 +615,9 @@ public class FusionClient {
 
             Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(covertT0 + 5);
             if(blindSigServerMessage == null) {
+                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("blindSigServerMessage1 is null");
-                return RoundStatus.FALSE;
+                return FusionStatus.FAILED;
             }
 
             if(blindSigServerMessage.hasBlindsigresponses()) {
@@ -627,8 +629,9 @@ public class FusionClient {
                 }
 
                 if(scalars.size() != blindSignatureRequests.size()) {
+                    this.fusionStatus = FusionStatus.FAILED;
                     System.out.println("scalars != blindSigRequests: " + scalars.size() + " vs. " + blindSignatureRequests.size());
-                    return RoundStatus.FALSE;
+                    return FusionStatus.FAILED;
                 }
 
                 this.fusionStatus = FusionStatus.PRODUCING_BLIND_SIGNATURES;
@@ -647,8 +650,9 @@ public class FusionClient {
                 Thread.sleep((int)(remTime * 1000D));
 
                 if(myComponents.size() != blindSigs.size()) {
+                    this.fusionStatus = FusionStatus.FAILED;
                     System.out.println("My components size != blind Sigs size!");
-                    return RoundStatus.FALSE;
+                    return FusionStatus.FAILED;
                 }
 
                 ArrayList<Fusion.CovertMessage> covertMessages = new ArrayList<>();
@@ -680,12 +684,14 @@ public class FusionClient {
                         try {
                             int index = allCommitments.indexOf(commitment);
                             if(index == -1) {
+                                this.fusionStatus = FusionStatus.FAILED;
                                 System.out.println("missing commitment");
-                                return RoundStatus.FALSE;
+                                return FusionStatus.FAILED;
                             }
                         } catch(Exception e) {
+                            this.fusionStatus = FusionStatus.FAILED;
                             System.out.println("missing commitment");
-                            return RoundStatus.FALSE;
+                            return FusionStatus.FAILED;
                         }
                     }
 
@@ -699,7 +705,7 @@ public class FusionClient {
 
                         if(covertClock() > 20) {
                             System.out.println("Shared components message arrived too slowly.");
-                            return RoundStatus.FALSE;
+                            return FusionStatus.FAILED;
                         }
 
                         for(ByteString component : myComponents) {
@@ -707,13 +713,13 @@ public class FusionClient {
                                 int index = allComponents.indexOf(component);
                                 if(index == -1) {
                                     System.out.println("missing component");
-                                    return RoundStatus.FALSE;
+                                    return FusionStatus.FAILED;
                                 } else {
                                     System.out.println("has component!");
                                 }
                             } catch(Exception e) {
                                 System.out.println("missing component");
-                                return RoundStatus.FALSE;
+                                return FusionStatus.FAILED;
                             }
                         }
 
@@ -723,7 +729,7 @@ public class FusionClient {
                         System.out.println("Our session hash: " + sessionHashBs);
                         if(shareCovertComponentsMsg.hasSessionHash() && !msgSessionHash.equals(sessionHashBs)) {
                             System.out.println("Session hashes do not match!");
-                            return RoundStatus.FALSE;
+                            return FusionStatus.FAILED;
                         }
 
                         if(!skipSignatures) {
@@ -773,19 +779,19 @@ public class FusionClient {
                                 Fusion.FusionResult result = resultServerMessage.getFusionresult();
                                 if(result.getOk()) {
                                     this.fusionStatus = FusionStatus.FUSED;
-                                    return RoundStatus.TRUE;
+                                    return FusionStatus.FUSED;
                                 } else {
-                                    this.fusionStatus = FusionStatus.NOT_FUSING;
-                                    return RoundStatus.QUIT;
+                                    this.fusionStatus = FusionStatus.FAILED;
+                                    return FusionStatus.FAILED;
                                 }
                             } else {
-                                this.fusionStatus = FusionStatus.NOT_FUSING;
-                                return RoundStatus.QUIT;
+                                this.fusionStatus = FusionStatus.FAILED;
+                                return FusionStatus.FAILED;
                             }
                         } else {
-                            this.fusionStatus = FusionStatus.NOT_FUSING;
+                            this.fusionStatus = FusionStatus.FAILED;
                             System.out.println("SKipping signatures");
-                            return RoundStatus.QUIT;
+                            return FusionStatus.FAILED;
                         }
                     } else {
                         System.out.println("SHARE COMPONENT MESSAGE: ");
@@ -799,10 +805,13 @@ public class FusionClient {
                 System.out.println("ROUND MESSAGE: ");
                 System.out.println(blindSigServerMessage);
             }
-            return RoundStatus.FALSE;
+
+            this.fusionStatus = FusionStatus.FAILED;
+            return FusionStatus.FAILED;
         }
 
-        return RoundStatus.FALSE;
+        this.fusionStatus = FusionStatus.FAILED;
+        return FusionStatus.FAILED;
     }
 
     private GeneratedComponents genComponents(long numBlanks, ArrayList<Pair<TransactionOutput, ECKey>> inputs, ArrayList<Pair<Script, Long>> outputs, long componentFeeRate) {

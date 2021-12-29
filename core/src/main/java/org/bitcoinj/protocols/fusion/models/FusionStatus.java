@@ -11,5 +11,6 @@ public enum FusionStatus {
     RECEIVING_ALL_COMPONENTS,
     SIGNING,
     COVERTLY_SENDING_SIGNATURES,
-    FUSED
+    FUSED,
+    FAILED
 }
