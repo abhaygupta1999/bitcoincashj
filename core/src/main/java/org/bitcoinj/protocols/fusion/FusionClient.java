@@ -351,7 +351,7 @@ public class FusionClient {
                                 poolStatuses = new ArrayList<>();
                                 for(long tier : tierOutputs.keySet()) {
                                     Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
-                                    PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers());
+                                    PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
                                     poolStatuses.add(poolStatus);
                                 }
                             }
