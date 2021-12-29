@@ -25,39 +25,63 @@ public class CovertSubmitter {
     }
 
     public void scheduleConnections() {
-        for(CovertClient client : connections) {
-            client.runConnection();
-        }
+        new Thread() {
+            @Override
+            public void run() {
+                ArrayList<CovertClient> connectionsCopy = new ArrayList<>(connections);
+                connectionsCopy.addAll(spareConnections);
+                for(CovertClient client : connectionsCopy) {
+                    client.runConnection();
+                    try {
+                        Thread.sleep(500L);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }.start();
     }
 
-    public void scheduleSubmissions(final ArrayList<Fusion.CovertMessage> covertMessages, final long startTime) {
+    public void scheduleSubmissions(final ArrayList<Fusion.CovertMessage> covertMessages, final double startTime, final double endTime) {
+        int messageIndex = 0;
         for(CovertClient client : connections) {
             client.done = false;
+            client.brokenPipe = false;
+            client.msg = covertMessages.get(messageIndex);
+            messageIndex++;
         }
         new Thread() {
             @Override
             public void run() {
-                int messageIndex = 0;
-                ArrayList<CovertClient> connectionsCopy = new ArrayList<>(connections);
-                ArrayList<Fusion.CovertMessage> messagesCopy = new ArrayList<>(covertMessages);
-                for(Fusion.CovertMessage covertMessage : messagesCopy) {
-                    while (true) {
-                        CovertClient covertClient = connectionsCopy.get(messageIndex);
-                        while(covertClient.brokenPipe) {
-                            covertClient.restartConnection();
-                            int randSpare = new Random().nextInt(spareConnections.size());
-                            covertClient = spareConnections.get(randSpare);
-                        }
-                        if (!covertClient.done) {
-                            covertClient.submit(covertMessage);
-                            Fusion.CovertResponse response = covertClient.receiveMessage(3);
-                            if(response != null) {
-                                System.out.println(response);
-                                if (response.hasOk()) {
-                                    System.out.println("response ok");
-                                    covertClient.done = true;
-                                    messageIndex++;
+                while ((System.currentTimeMillis()/1000D) < endTime) {
+                    double currentTime = System.currentTimeMillis()/1000D;
+                    if(currentTime >= startTime) {
+                        for (CovertClient covertClient : connections) {
+                            Fusion.CovertMessage cachedMsg = covertClient.msg;
+                            while (covertClient.brokenPipe) {
+                                covertClient.restartConnection();
+                                int randSpare = new Random().nextInt(spareConnections.size());
+                                covertClient = spareConnections.get(randSpare);
+                                covertClient.msg = cachedMsg;
+                            }
+                            if (!covertClient.done && covertClient.msg != null) {
+                                covertClient.submit(covertClient.msg);
+                                double remTime = (startTime+15)-(System.currentTimeMillis()/1000D);
+                                if(remTime < 0) {
+                                    System.out.println("too slow for covert submission");
                                     break;
+                                }
+                                Fusion.CovertResponse response = covertClient.receiveMessage(remTime);
+                                if (response != null) {
+                                    if (response.hasOk()) {
+                                        System.out.println("response ok");
+                                        covertClient.done = true;
+                                        covertClient.msg = null;
+                                    } else {
+                                        System.out.println(response);
+                                    }
+                                } else {
+                                    System.out.println("response NULL");
                                 }
                             }
                         }

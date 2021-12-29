@@ -64,8 +64,8 @@ public class FusionClient {
     private byte[] sessionHash;
 
     //TIME VARIABLES
-    private long tFusionBegin = 0;
-    private long covertT0 = 0;
+    private double tFusionBegin = 0;
+    private double covertT0 = 0;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
         SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
@@ -112,23 +112,19 @@ public class FusionClient {
         System.out.println("sent: " + Hex.toHexString(bos.toByteArray()));
     }
 
-    public Fusion.ServerMessage receiveMessage(int timeout) {
-        int maxTime = (int)(System.currentTimeMillis()/1000)+timeout;
-        while(true) {
-            try {
-                int remTime = maxTime-(int)(System.currentTimeMillis()/1000);
-                if(remTime < 0) {
-                    return null;
-                }
-                this.socket.setSoTimeout(remTime*1000);
-                byte[] prefixBytes = in.readNBytes(12);
-                if (prefixBytes.length == 0) return null;
-                byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
-                int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
-                return Fusion.ServerMessage.parseFrom(in.readNBytes(bufferSize));
-            } catch (Exception e) {
-            }
+    public Fusion.ServerMessage receiveMessage(double timeout) {
+        try {
+            this.socket.setSoTimeout((int)(timeout*1000D));
+            byte[] prefixBytes = in.readNBytes(12);
+            if (prefixBytes.length == 0) return null;
+            byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
+            int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
+            return Fusion.ServerMessage.parseFrom(in.readNBytes(bufferSize));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
+
+        return null;
     }
 
     public SSLSocket getSocket() {
@@ -406,7 +402,7 @@ public class FusionClient {
         int covertPort = fusionBegin.getCovertPort();
 
         try {
-            this.lastHash = calcInitialHash(this.tier, fusionBegin.getCovertDomain(), covertPort, fusionBegin.getServerTime());
+            this.lastHash = calcInitialHash(this.tier, fusionBegin.getCovertDomain(), covertPort, fusionBegin.getCovertSsl(), fusionBegin.getServerTime());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -414,16 +410,13 @@ public class FusionClient {
         CovertSubmitter covertSubmitter = new CovertSubmitter(covertDomain, covertPort, this.numComponents, 6);
         covertSubmitter.scheduleConnections();
 
-        long tend = tFusionBegin + (WARMUP_TIME - WARMUP_SLOP - 1);
-
-        while((System.currentTimeMillis()/1000L) < tend) {
-            long remTime = tend-(System.currentTimeMillis()/1000L);
-            System.out.println("Waiting for startround... " + remTime);
-            try {
-                Thread.sleep(1000L);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        double tend = tFusionBegin + (WARMUP_TIME - WARMUP_SLOP - 1);
+        double remTime = tend-(System.currentTimeMillis()/1000D);
+        try {
+            System.out.println("Sleeping for " + remTime + "s");
+            Thread.sleep((int)remTime*1000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
         return covertSubmitter;
@@ -445,18 +438,18 @@ public class FusionClient {
 
         if(serverMessage.hasStartround()) {
             Fusion.StartRound startRound = serverMessage.getStartround();
-            covertT0 = System.currentTimeMillis()/1000L;
+            covertT0 = System.currentTimeMillis()/1000D;
             long roundTime = startRound.getServerTime();
             System.out.println("roundtime: " + roundTime);
             System.out.println("ourtime: " + covertT0);
 
-            long clockMismatch = roundTime - covertT0;
+            double clockMismatch = roundTime - covertT0;
             if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
                 return RoundStatus.FALSE;
             }
 
             if(tFusionBegin != 0) {
-                long lag = covertT0 - tFusionBegin - WARMUP_TIME;
+                double lag = covertT0 - tFusionBegin - WARMUP_TIME;
                 if(Math.abs(lag) > WARMUP_SLOP) {
                     System.out.println("Warmup period too different from expectation");
                     return RoundStatus.FALSE;
@@ -543,7 +536,7 @@ public class FusionClient {
                     .build();
             this.sendMessage(clientMessage);
 
-            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(5);
+            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(covertT0 + 5);
             if(blindSigServerMessage == null) {
                 System.out.println("blindSigServerMessage1 is null");
                 return RoundStatus.FALSE;
@@ -569,15 +562,9 @@ public class FusionClient {
                     blindSigs.add(sig);
                 }
 
-                long remTime = 5 - covertClock();
+                double remTime = 5 - covertClock();
                 if(remTime < 0) {
                     System.out.println("Arrived at covert-component phase too slowly.");
-                }
-                System.out.println("Remtime: " + remTime);
-                try {
-                    Thread.sleep(remTime*1000L);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
                 }
 
                 if(myComponents.size() != blindSigs.size()) {
@@ -600,7 +587,7 @@ public class FusionClient {
                     covertMessages.add(covertMessage);
                 }
 
-                covertSubmitter.scheduleSubmissions(covertMessages, covertT0 + 5);
+                covertSubmitter.scheduleSubmissions(covertMessages, covertT0 + 5, covertT0 + 15);
 
                 Fusion.ServerMessage allCommitmentsServerMsg = this.receiveMessage(+20);
                 if(allCommitmentsServerMsg.hasAllcommitments()) {
@@ -624,7 +611,7 @@ public class FusionClient {
                     Fusion.ServerMessage shareCovertComponentsServerMsg = this.receiveMessage(+20);
                     if(shareCovertComponentsServerMsg.hasSharecovertcomponents()) {
                         Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
-                        ByteString msgSessionHash = shareCovertComponentsMsg.getSessionHash();
+                        String msgSessionHash = Hex.toHexString(shareCovertComponentsMsg.getSessionHash().toByteArray());
                         List<ByteString> allComponents = shareCovertComponentsMsg.getComponentsList();
                         boolean skipSignatures = shareCovertComponentsMsg.getSkipSignatures();
 
@@ -648,9 +635,11 @@ public class FusionClient {
                             }
                         }
 
-                        this.lastHash = sessionHash = calcRoundHash(lastHash, roundPubKey, roundTime, allCommitments, allComponents);
-                        ByteString sessionHashBs = ByteString.copyFrom(this.sessionHash);
-                        if(!msgSessionHash.equals(sessionHashBs)) {
+                        System.out.println("Previous hash: " + Hex.toHexString(lastHash));
+                        this.lastHash = this.sessionHash = calcRoundHash(lastHash, roundPubKey, roundTime, allCommitments, allComponents);
+                        String sessionHashBs = Hex.toHexString(this.sessionHash);
+                        System.out.println("Our session hash: " + sessionHashBs);
+                        if(shareCovertComponentsMsg.hasSessionHash() && !msgSessionHash.equals(sessionHashBs)) {
                             System.out.println("Session hashes do not match!");
                             return RoundStatus.FALSE;
                         }
@@ -696,7 +685,7 @@ public class FusionClient {
                             }
 
                             System.out.println("Scheduling signature submission");
-                            covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20);
+                            covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20, covertT0 + 30);
                             Fusion.FusionResult result = this.receiveMessage(20).getFusionresult();
                             System.out.println("result: " + result);
                             return result.getOk() ? RoundStatus.TRUE : RoundStatus.FALSE;
@@ -848,7 +837,7 @@ public class FusionClient {
         return zipped;
     }
 
-    public byte[] calcInitialHash(long tier, ByteString covertDomain, int covertPort, long beginTime) throws IOException {
+    public byte[] calcInitialHash(long tier, ByteString covertDomain, int covertPort, boolean covertSsl, long beginTime) throws IOException {
         UnsafeByteArrayOutputStream hashBos = new UnsafeByteArrayOutputStream();
         addToBos(hashBos, "Cash Fusion Session".getBytes());
         addToBos(hashBos, "alpha13".getBytes());
@@ -861,7 +850,7 @@ public class FusionClient {
         portBuffer.putInt(covertPort);
         byte[] portBytes = portBuffer.array();
         addToBos(hashBos, portBytes);
-        addToBos(hashBos, Hex.decode("00"));
+        addToBos(hashBos, covertSsl ? Hex.decode("01") : Hex.decode("00"));
         ByteBuffer timeBuffer = ByteBuffer.allocate(8);
         timeBuffer.putLong(beginTime);
         byte[] timeBytes = timeBuffer.array();
@@ -891,7 +880,7 @@ public class FusionClient {
         for(ByteString byteString : list) {
             addToBos(hashBos, byteString.toByteArray());
         }
-        return hashBos.toByteArray();
+        return Sha256Hash.hash(hashBos.toByteArray());
     }
 
     public void addToBos(UnsafeByteArrayOutputStream bos, byte[] bytes) throws IOException {
@@ -901,8 +890,8 @@ public class FusionClient {
         bos.write(bytes);
     }
 
-    public long covertClock() {
-        return (System.currentTimeMillis()/1000L) - covertT0;
+    public double covertClock() {
+        return (System.currentTimeMillis()/1000D) - covertT0;
     }
 
     public Transaction constructTransaction(List<ByteString> components, byte[] sessionHash) throws InvalidProtocolBufferException {

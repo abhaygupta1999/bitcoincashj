@@ -15,6 +15,7 @@ import java.util.Arrays;
 public class CovertClient {
     public boolean brokenPipe = false;
     public boolean done = true;
+    public Fusion.CovertMessage msg;
     private String host;
     private int port;
     private Socket socket;
@@ -41,8 +42,8 @@ public class CovertClient {
                     BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
                     BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
                     setSocket(socket, out, in);
-                    ping();
-                    brokenPipe = false;
+                    if(!brokenPipe)
+                        ping();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -55,9 +56,10 @@ public class CovertClient {
         try {
             out.close();
             in.close();
-            socketThread.stop();
+            socket.close();
             socketThread = null;
             runConnection();
+            brokenPipe = false;
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -73,7 +75,8 @@ public class CovertClient {
         Fusion.CovertMessage covertMessage = Fusion.CovertMessage.newBuilder()
                 .setPing(ping)
                 .build();
-        this.submit(covertMessage);
+        this.msg = covertMessage;
+        this.submit(msg);
     }
 
     private void setSocket(Socket socket, BufferedOutputStream out, BufferedInputStream in) {
@@ -98,28 +101,26 @@ public class CovertClient {
             bos.write(covertMessage.toByteArray());
             out.write(bos.toByteArray());
             out.flush();
+            msg = null;
         } catch(IOException e) {
             e.printStackTrace();
             brokenPipe = true;
         }
     }
 
-    public Fusion.CovertResponse receiveMessage(int timeout) {
-        int maxTime = (int)(System.currentTimeMillis()/1000)+timeout;
-        while(true) {
-            try {
-                int remTime = maxTime-(int)(System.currentTimeMillis()/1000);
-                if(remTime < 0) {
-                    return null;
-                }
-                this.socket.setSoTimeout(remTime*1000);
-                byte[] prefixBytes = in.readNBytes(12);
-                if (prefixBytes.length == 0) return null;
-                byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
-                int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
-                return Fusion.CovertResponse.parseFrom(in.readNBytes(bufferSize));
-            } catch (Exception e) {
-            }
+    public Fusion.CovertResponse receiveMessage(double timeout) {
+        try {
+            this.socket.setSoTimeout((int)(timeout*1000D));
+            byte[] prefixBytes = in.readNBytes(12);
+            if (prefixBytes.length == 0) return null;
+            byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
+            int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
+            return Fusion.CovertResponse.parseFrom(in.readNBytes(bufferSize));
+        } catch (IOException e) {
+            e.printStackTrace();
+            brokenPipe = true;
         }
+
+        return null;
     }
 }
