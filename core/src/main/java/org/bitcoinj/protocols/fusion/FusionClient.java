@@ -421,7 +421,7 @@ public class FusionClient {
                 public void run() {
                     Fusion.ServerMessage serverMessage;
                     while(true) {
-                        if(socket != null) {
+                        if(socket != null && !socket.isClosed()) {
                             serverMessage = receiveMessage(10);
                             if (serverMessage != null) {
                                 if (serverMessage.hasFusionbegin()) {
