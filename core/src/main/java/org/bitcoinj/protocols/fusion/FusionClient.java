@@ -482,6 +482,7 @@ public class FusionClient {
 
         CovertSubmitter covertSubmitter = new CovertSubmitter(covertDomain, covertPort, this.numComponents, 6);
         covertSubmitter.scheduleConnections();
+        this.fusionStatus = FusionStatus.CREATING_TOR_CONNECTIONS;
 
         double tend = tFusionBegin + (WARMUP_TIME - WARMUP_SLOP - 1);
         double remTime = tend-(System.currentTimeMillis()/1000D);

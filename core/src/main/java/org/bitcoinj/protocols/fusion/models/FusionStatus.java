@@ -2,6 +2,7 @@ package org.bitcoinj.protocols.fusion.models;
 
 public enum FusionStatus {
     NOT_FUSING,
+    CREATING_TOR_CONNECTIONS,
     GENERATING_COMPONENTS,
     MAKING_COMMITMENTS,
     SUBMITTING_COMMITMENTS,
