@@ -112,20 +112,77 @@ public class FusionClient {
     public Fusion.ServerMessage receiveMessage(double timeout) {
         try {
             this.socket.setSoTimeout((int)(timeout*1000D));
-            byte[] prefixBytes = new byte[12];
-            int size = in.read(prefixBytes, 0, 12);
-            if (size == 0) return null;
+            byte[] prefixBytes = readNBytes(in, 12);
+            if (prefixBytes.length == 0) return null;
             byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
             int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
-            byte[] messageBytes = new byte[bufferSize];
-            int size2 = in.read(messageBytes, 0, bufferSize);
-            if(size2 == 0) return null;
-            return Fusion.ServerMessage.parseFrom(messageBytes);
+            return Fusion.ServerMessage.parseFrom(readNBytes(in, bufferSize));
         } catch (IOException e) {
             e.printStackTrace();
         }
 
         return null;
+    }
+
+    public byte[] readNBytes(BufferedInputStream in, int len) throws IOException {
+        if (len < 0) {
+            throw new IllegalArgumentException("len < 0");
+        } else {
+            List<byte[]> bufs = null;
+            byte[] result = null;
+            int total = 0;
+            int remaining = len;
+
+            int n;
+            do {
+                byte[] buf = new byte[Math.min(remaining, 8192)];
+
+                int nread;
+                for(nread = 0; (n = in.read(buf, nread, Math.min(buf.length - nread, remaining))) > 0; remaining -= n) {
+                    nread += n;
+                }
+
+                if (nread > 0) {
+                    if (2147483639 - total < nread) {
+                        throw new OutOfMemoryError("Required array size too large");
+                    }
+
+                    total += nread;
+                    if (result == null) {
+                        result = buf;
+                    } else {
+                        if (bufs == null) {
+                            bufs = new ArrayList();
+                            bufs.add(result);
+                        }
+
+                        bufs.add(buf);
+                    }
+                }
+            } while(n >= 0 && remaining > 0);
+
+            if (bufs == null) {
+                if (result == null) {
+                    return new byte[0];
+                } else {
+                    return result.length == total ? result : Arrays.copyOf(result, total);
+                }
+            } else {
+                result = new byte[total];
+                int offset = 0;
+                remaining = total;
+
+                int count;
+                for(Iterator var12 = bufs.iterator(); var12.hasNext(); remaining -= count) {
+                    byte[] b = (byte[])var12.next();
+                    count = Math.min(b.length, remaining);
+                    System.arraycopy(b, 0, result, offset, count);
+                    offset += count;
+                }
+
+                return result;
+            }
+        }
     }
 
     public SSLSocket getSocket() {
