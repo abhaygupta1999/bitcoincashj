@@ -386,7 +386,7 @@ public class FusionClient {
     private CovertSubmitter startCovert(Fusion.ServerMessage serverMessage) {
         // TODO TIMING IS CRITICAL - MESSAGE 2
         Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
-        tFusionBegin = System.currentTimeMillis()/1000L;
+        tFusionBegin = System.currentTimeMillis()/1000D;
         this.tier = fusionBegin.getTier();
         ArrayList<Long> outputs = tierOutputs.get(this.tier);
         for(long output : outputs) {
@@ -673,7 +673,7 @@ public class FusionClient {
 
                                     Fusion.CovertTransactionSignature covertTransactionSignature = Fusion.CovertTransactionSignature.newBuilder()
                                             .setRoundPubkey(ByteString.copyFrom(roundPubKey))
-                                            .setTxsignature(ByteString.copyFrom(schnorrSignature.encodeToBitcoin()))
+                                            .setTxsignature(ByteString.copyFrom(schnorrSignature.getSignature()))
                                             .setWhichInput(input.getIndex())
                                             .build();
                                     Fusion.CovertMessage covertMessage = Fusion.CovertMessage.newBuilder()

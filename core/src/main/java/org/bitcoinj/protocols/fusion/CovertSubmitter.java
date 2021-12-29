@@ -43,13 +43,15 @@ public class CovertSubmitter {
     }
 
     public void scheduleSubmissions(final ArrayList<Fusion.CovertMessage> covertMessages, final double startTime, final double endTime) {
-        int messageIndex = 0;
-        for(CovertClient client : connections) {
+        int size = Math.min(covertMessages.size(), connections.size());
+
+        for(int x = 0; x < size; x++) {
+            CovertClient client = this.connections.get(x);
             client.done = false;
             client.brokenPipe = false;
-            client.msg = covertMessages.get(messageIndex);
-            messageIndex++;
+            client.msg = covertMessages.get(x);
         }
+
         new Thread() {
             @Override
             public void run() {
