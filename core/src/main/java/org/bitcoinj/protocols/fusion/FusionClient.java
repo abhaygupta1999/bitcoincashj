@@ -69,12 +69,8 @@ public class FusionClient {
     public FusionStatus fusionStatus = FusionStatus.NOT_FUSING;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
-        SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9050);
-        Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
-        Socket tunnel = new Socket(proxy);
-        tunnel.connect(new InetSocketAddress(host, port));
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
-        SSLSocket socket = (SSLSocket)factory.createSocket(tunnel, host, port, true);
+        SSLSocket socket = (SSLSocket)factory.createSocket(host, port);
         socket.setTcpNoDelay(true);
         socket.setKeepAlive(true);
         socket.setUseClientMode(true);
