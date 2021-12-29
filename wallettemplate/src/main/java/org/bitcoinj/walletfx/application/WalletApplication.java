@@ -43,6 +43,7 @@ import javax.net.ssl.SSLSocket;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Random;
 
 import static org.bitcoinj.walletfx.utils.GuiUtils.informationalAlert;
 
@@ -164,7 +165,18 @@ public abstract class WalletApplication implements AppDelegate {
                         FusionClient fusionClient; //cashfusion.electroncash.dk
                         try {
                             ArrayList<TransactionOutput> utxos = new ArrayList<>(wallet().getUtxos());
-                            fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788, utxos, params(), wallet());
+                            if(utxos.size() > 0) {
+                                ArrayList<TransactionOutput> filteredUtxos = new ArrayList<>();
+                                int inputCount = 4;
+                                for (int x = 0; x < inputCount; x++) {
+                                    int randIndex = new Random().nextInt(utxos.size());
+                                    TransactionOutput utxo = utxos.get(randIndex);
+                                    if (!filteredUtxos.contains(utxo)) {
+                                        filteredUtxos.add(utxo);
+                                    }
+                                }
+                                fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788, filteredUtxos, params(), wallet());
+                            }
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
