@@ -123,6 +123,7 @@ public class FusionClient {
             int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
             byte[] messageBytes = new byte[bufferSize];
             int size2 = in.read(messageBytes, 0, bufferSize);
+            if(size2 == 0) return null;
             return Fusion.ServerMessage.parseFrom(messageBytes);
         } catch (IOException e) {
             e.printStackTrace();
@@ -565,10 +566,12 @@ public class FusionClient {
                     blindSigs.add(sig);
                 }
 
-                double remTime = 5 - covertClock();
+                double remTime = 5d - covertClock();
                 if(remTime < 0) {
                     System.out.println("Arrived at covert-component phase too slowly.");
                 }
+                System.out.println("Remtime: " + remTime);
+                Thread.sleep((int)(remTime * 1000D));
 
                 if(myComponents.size() != blindSigs.size()) {
                     System.out.println("My components size != blind Sigs size!");
