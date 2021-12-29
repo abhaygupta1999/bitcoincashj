@@ -19,10 +19,6 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.*;
 import java.math.BigInteger;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.Socket;
-import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -93,6 +89,7 @@ public class FusionClient {
     }
 
     public FusionClient updateUtxos(ArrayList<TransactionOutput> coins) throws IOException {
+        System.out.println("Updating utxos...");
         this.out.close();
         this.in.close();
         this.socket.close();
@@ -111,7 +108,7 @@ public class FusionClient {
         this.inputs = new ArrayList<>();
         this.tierOutputs = new HashMap<>();
         this.outputs = new ArrayList<>();
-
+        System.out.println("Updated!");
         return new FusionClient(this.host, this.port, coins, this.wallet);
     }
 
