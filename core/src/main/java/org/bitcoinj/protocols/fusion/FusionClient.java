@@ -69,7 +69,7 @@ public class FusionClient {
     public FusionStatus fusionStatus = FusionStatus.NOT_FUSING;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, NetworkParameters params, Wallet wallet) throws IOException {
-        SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9050);
+        SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
         Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
         Socket tunnel = new Socket(proxy);
         tunnel.connect(new InetSocketAddress(host, port));
@@ -116,11 +116,14 @@ public class FusionClient {
     public Fusion.ServerMessage receiveMessage(double timeout) {
         try {
             this.socket.setSoTimeout((int)(timeout*1000D));
-            byte[] prefixBytes = in.readNBytes(12);
-            if (prefixBytes.length == 0) return null;
+            byte[] prefixBytes = new byte[12];
+            int size = in.read(prefixBytes, 0, 12);
+            if (size == 0) return null;
             byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
             int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
-            return Fusion.ServerMessage.parseFrom(in.readNBytes(bufferSize));
+            byte[] messageBytes = new byte[bufferSize];
+            int size2 = in.read(messageBytes, 0, bufferSize);
+            return Fusion.ServerMessage.parseFrom(messageBytes);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -348,6 +351,7 @@ public class FusionClient {
                                 break;
                             } else if(serverMessage.hasTierstatusupdate()) {
                                 Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
+                                System.out.println(update);
                                 poolStatuses = new ArrayList<>();
                                 for(long tier : tierOutputs.keySet()) {
                                     Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);

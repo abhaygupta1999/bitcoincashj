@@ -33,7 +33,7 @@ public class CovertClient {
             @Override
             public void run() {
                 try {
-                    SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9050);
+                    SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
                     Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
                     Socket socket = new Socket(proxy);
                     socket.setTcpNoDelay(true);
@@ -111,14 +111,16 @@ public class CovertClient {
     public Fusion.CovertResponse receiveMessage(double timeout) {
         try {
             this.socket.setSoTimeout((int)(timeout*1000D));
-            byte[] prefixBytes = in.readNBytes(12);
-            if (prefixBytes.length == 0) return null;
+            byte[] prefixBytes = new byte[12];
+            int size = in.read(prefixBytes, 0, 12);
+            if (size == 0) return null;
             byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
             int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
-            return Fusion.CovertResponse.parseFrom(in.readNBytes(bufferSize));
+            byte[] messageBytes = new byte[bufferSize];
+            int size2 = in.read(messageBytes, 0, bufferSize);
+            return Fusion.CovertResponse.parseFrom(messageBytes);
         } catch (IOException e) {
             e.printStackTrace();
-            brokenPipe = true;
         }
 
         return null;

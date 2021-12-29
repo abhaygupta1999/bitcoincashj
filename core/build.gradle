@@ -35,8 +35,7 @@ dependencies {
     testImplementation 'org.hamcrest:hamcrest-library:2.2'
 }
 
-sourceCompatibility = 1.11
-targetCompatibility = 1.11
+sourceCompatibility = 1.7
 compileJava.options.encoding = 'UTF-8'
 compileTestJava.options.encoding = 'UTF-8'
 javadoc.options.encoding = 'UTF-8'
