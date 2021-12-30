@@ -615,6 +615,13 @@ public class FusionClient {
             Fusion.ClientMessage clientMessage = Fusion.ClientMessage.newBuilder()
                     .setPlayercommit(playerCommit)
                     .build();
+
+            if(socket.isClosed() || !socket.isConnected() || socket.isOutputShutdown()) {
+                covertSubmitter.closeConnections();
+                System.out.println("To be respectful to the Fusion server, if we have any sort of connection issue we should disconnect before making a commitment.");
+                return FusionStatus.FAILED;
+            }
+
             this.fusionStatus = FusionStatus.SUBMITTING_COMMITMENTS;
             this.sendMessage(clientMessage);
 

@@ -92,4 +92,17 @@ public class CovertSubmitter {
             }
         }.start();
     }
+
+    public void closeConnections() {
+        ArrayList<CovertClient> connectionsCopy = new ArrayList<>(connections);
+        connectionsCopy.addAll(spareConnections);
+        for(CovertClient client : connectionsCopy) {
+            try {
+                client.getSocket().close();
+                Thread.sleep(500L);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
 }
