@@ -182,13 +182,12 @@ public class ScriptPattern {
     }
 
     public static boolean isCashFusion(Transaction tx) {
-        for(TransactionOutput output : tx.getOutputs()) {
-            if (ScriptPattern.isOpReturn(output.getScriptPubKey())) {
-                byte[] data = output.getScriptPubKey().getChunks().get(1).data;
-                if (data != null) {
-                    String protocolCode = new String(Hex.encode(data), StandardCharsets.UTF_8);
-                    return protocolCode.equals("46555a00");
-                }
+        TransactionOutput output = tx.getOutput(0);
+        if (ScriptPattern.isOpReturn(output.getScriptPubKey())) {
+            byte[] data = output.getScriptPubKey().getChunks().get(1).data;
+            if (data != null) {
+                String protocolCode = new String(Hex.encode(data), StandardCharsets.UTF_8);
+                return protocolCode.equals("46555a00");
             }
         }
 
