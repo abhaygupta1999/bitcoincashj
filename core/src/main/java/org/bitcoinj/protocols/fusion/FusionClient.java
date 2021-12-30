@@ -616,7 +616,7 @@ public class FusionClient {
                     .setPlayercommit(playerCommit)
                     .build();
 
-            if(socket.isClosed() || !socket.isConnected() || socket.isOutputShutdown()) {
+            if(socket.isClosed() || !socket.isConnected()) {
                 covertSubmitter.closeConnections();
                 System.out.println("To be respectful to the Fusion server, if we have any sort of connection issue we should disconnect before making a commitment.");
                 return FusionStatus.FAILED;
