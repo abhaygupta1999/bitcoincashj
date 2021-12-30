@@ -17,10 +17,10 @@
 
 package org.bitcoinj.script;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.Utils;
+import org.bitcoinj.core.*;
+import org.bouncycastle.util.encoders.Hex;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -179,6 +179,20 @@ public class ScriptPattern {
         if (chunkData == null || chunkData.length != 36)
             return false;
         return Arrays.equals(Arrays.copyOfRange(chunkData, 0, 4), SEGWIT_COMMITMENT_HEADER);
+    }
+
+    public static boolean isCashFusion(Transaction tx) {
+        for(TransactionOutput output : tx.getOutputs()) {
+            if (ScriptPattern.isOpReturn(output.getScriptPubKey())) {
+                byte[] data = output.getScriptPubKey().getChunks().get(1).data;
+                if (data != null) {
+                    String protocolCode = new String(Hex.encode(data), StandardCharsets.UTF_8);
+                    return protocolCode.equals("46555a00");
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

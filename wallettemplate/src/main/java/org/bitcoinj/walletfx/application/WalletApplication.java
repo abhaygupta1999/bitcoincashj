@@ -175,7 +175,7 @@ public abstract class WalletApplication implements AppDelegate {
                                         filteredUtxos.add(utxo);
                                     }
                                 }
-                                fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788, filteredUtxos, params(), wallet());
+                                fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788, filteredUtxos, wallet());
                             }
                         } catch (IOException e) {
                             e.printStackTrace();
