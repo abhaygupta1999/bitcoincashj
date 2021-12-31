@@ -114,19 +114,17 @@ public class FusionClient {
 
     public void sendMessage(Fusion.ClientMessage clientMessage) throws IOException {
         int size = clientMessage.toByteArray().length;
-
-        UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
-        bos.write(magicBytes);
-
-        ByteBuffer sizeBuf = ByteBuffer.allocate(4);
+        int messageSizeBufferSize = 4;
+        int bufferSize = magicBytes.length + messageSizeBufferSize + size;
+        ByteBuffer bos = ByteBuffer.allocate(bufferSize);
+        bos.put(magicBytes);
+        ByteBuffer sizeBuf = ByteBuffer.allocate(messageSizeBufferSize);
         sizeBuf.putInt(size);
-        bos.write(sizeBuf.array());
+        bos.put(sizeBuf.array());
+        bos.put(clientMessage.toByteArray());
 
-        bos.write(clientMessage.toByteArray());
-        out.write(bos.toByteArray());
+        out.write(bos.array());
         out.flush();
-
-        System.out.println("sent: " + Hex.toHexString(bos.toByteArray()));
     }
 
     public Fusion.ServerMessage receiveMessage(double timeout) {
@@ -421,21 +419,25 @@ public class FusionClient {
                 public void run() {
                     Fusion.ServerMessage serverMessage;
                     while(true) {
-                        if(socket != null && !socket.isClosed()) {
-                            serverMessage = receiveMessage(10);
-                            if (serverMessage != null) {
-                                if (serverMessage.hasFusionbegin()) {
-                                    System.out.println("STARTING FUSION!");
-                                    break;
-                                } else if (serverMessage.hasTierstatusupdate()) {
-                                    Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
-                                    poolStatuses = new ArrayList<>();
-                                    for (long tier : tierOutputs.keySet()) {
-                                        Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
-                                        PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
-                                        poolStatuses.add(poolStatus);
+                        if(socket != null) {
+                            if(!socket.isClosed()) {
+                                serverMessage = receiveMessage(10);
+                                if (serverMessage != null) {
+                                    if (serverMessage.hasFusionbegin()) {
+                                        System.out.println("STARTING FUSION!");
+                                        break;
+                                    } else if (serverMessage.hasTierstatusupdate()) {
+                                        Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
+                                        poolStatuses = new ArrayList<>();
+                                        for (long tier : tierOutputs.keySet()) {
+                                            Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
+                                            PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
+                                            poolStatuses.add(poolStatus);
+                                        }
                                     }
                                 }
+                            } else {
+                                fusionStatus = FusionStatus.FAILED;
                             }
                         } else {
                             fusionStatus = FusionStatus.FAILED;
