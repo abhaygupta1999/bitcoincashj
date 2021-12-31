@@ -1203,7 +1203,6 @@ public class Peer extends PeerSocketHandler {
                     blocks.add(item);
                     break;
                 case DSPROOF:
-                    dsproofs.add(item);
                     break;
                 default:
                     throw new IllegalStateException("Not implemented: " + item.type);
@@ -1228,12 +1227,12 @@ public class Peer extends PeerSocketHandler {
 
         GetDataMessage getdata = new GetDataMessage(params);
 
-        Iterator<InventoryItem> dsproofIterator = dsproofs.iterator();
+        /*Iterator<InventoryItem> dsproofIterator = dsproofs.iterator();
         while (dsproofIterator.hasNext()) {
             InventoryItem item = dsproofIterator.next();
             getdata.addDsProof(item.hash);
             pendingDsProofDownloads.add(item.hash);
-        }
+        }*/
 
         Iterator<InventoryItem> it = transactions.iterator();
         while (it.hasNext()) {
