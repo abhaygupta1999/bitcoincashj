@@ -61,6 +61,7 @@ public class CovertSubmitter {
                         for (CovertClient covertClient : connections) {
                             Fusion.CovertMessage cachedMsg = covertClient.msg;
                             while (covertClient.brokenPipe) {
+                                System.out.println("BROKEN PIPE");
                                 covertClient.restartConnection();
                                 int randSpare = new Random().nextInt(spareConnections.size());
                                 covertClient = spareConnections.get(randSpare);

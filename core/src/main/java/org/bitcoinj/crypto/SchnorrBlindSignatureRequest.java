@@ -113,7 +113,13 @@ public class SchnorrBlindSignatureRequest {
         UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
         bos.write(Rxnew);
         bos.write(Utils.bigIntegerToBytes(sNew, 32));
-        return bos.toByteArray();
+        byte[] sig = bos.toByteArray();
+        boolean verified = SchnorrSignature.schnorr_verify(messageHash, this.pubKey, sig);
+        if(!verified) {
+            System.out.println("BLIND SIG VERIFICATION FAILED!");
+            return null;
+        }
+        return sig;
     }
 
     public BigInteger getE() {

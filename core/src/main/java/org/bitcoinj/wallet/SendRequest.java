@@ -79,7 +79,6 @@ public class SendRequest {
      * for the transaction). Any additional outputs are removed.
      */
     public boolean emptyWallet = false;
-    public boolean spendOnlyFused = false;
 
     @Nullable
     public Address preferredChangeAddress = null;

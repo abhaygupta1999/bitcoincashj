@@ -33,6 +33,8 @@ public class FusionClient {
     private final long MAX_EXCESS_FEE = 10000;
     private final long MAX_COMPONENTS = 40;
     private final long MIN_TX_COMPONENTS = 11;
+    private final long MAX_COMPONENT_FEERATE = 5000;
+    private final long MAX_FEE = MAX_COMPONENT_FEERATE * 7 + MAX_EXCESS_FEE;
     private SSLSocket socket;
     private String host;
     private int port;
@@ -42,17 +44,18 @@ public class FusionClient {
     private Wallet wallet;
     private Pedersen pedersen;
 
-    private ArrayList<Pair<TransactionOutput, ECKey>> coins = new ArrayList<>();
     private ArrayList<Pair<TransactionOutput, ECKey>> inputs = new ArrayList<>();
     private HashMap<Long, ArrayList<Long>> tierOutputs = new HashMap<>();
     private ArrayList<Pair<Script, Long>> outputs = new ArrayList<>();
-
+    private HashMap<Long, Long> safetyExcessFees = new HashMap<>();
     private long numComponents;
     private long componentFeeRate;
     private long minExcessFee;
     private long maxExcessFee;
     private ArrayList<Tier> availableTiers;
     private long tier;
+    private long safetyExcessFee;
+    private long safetySumIn;
 
     private byte[] lastHash;
     private byte[] sessionHash;
@@ -62,9 +65,10 @@ public class FusionClient {
     private double covertT0 = 0;
 
     public ArrayList<PoolStatus> poolStatuses = new ArrayList<>();
-    public FusionStatus fusionStatus = FusionStatus.NOT_FUSING;
 
-    public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet) throws IOException {
+    private FusionListener listener;
+
+    public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet, FusionListener listener) throws IOException {
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
         SSLSocket socket = (SSLSocket)factory.createSocket(host, port);
         socket.setTcpNoDelay(true);
@@ -76,7 +80,7 @@ public class FusionClient {
         this.wallet = wallet;
         for(TransactionOutput coin : coins) {
             ECKey key = this.wallet.findKeyFromAddress(coin.getAddressFromP2PKHScript(wallet.getParams()));
-            this.coins.add(Pair.of(coin, key));
+            this.inputs.add(Pair.of(coin, key));
         }
         this.availableTiers = new ArrayList<>();
         this.magicBytes = Hex.decode("765be8b4e4396dcf");
@@ -84,7 +88,7 @@ public class FusionClient {
         this.port = port;
         out = new BufferedOutputStream(socket.getOutputStream());
         in = new BufferedInputStream(socket.getInputStream());
-
+        this.listener = listener;
         greet();
     }
 
@@ -101,30 +105,31 @@ public class FusionClient {
         this.tFusionBegin = 0;
         this.covertT0 = 0;
         this.tier = 0;
-        this.fusionStatus = FusionStatus.NOT_FUSING;
+        this.listener.onFusionStatus(FusionStatus.NOT_FUSING);
         this.poolStatuses = new ArrayList<>();
         this.availableTiers = new ArrayList<>();
-        this.coins = new ArrayList<>();
         this.inputs = new ArrayList<>();
         this.tierOutputs = new HashMap<>();
         this.outputs = new ArrayList<>();
         System.out.println("Updated!");
-        return new FusionClient(this.host, this.port, coins, this.wallet);
+        return new FusionClient(this.host, this.port, coins, this.wallet, this.listener);
     }
 
     public void sendMessage(Fusion.ClientMessage clientMessage) throws IOException {
         int size = clientMessage.toByteArray().length;
-        int messageSizeBufferSize = 4;
-        int bufferSize = magicBytes.length + messageSizeBufferSize + size;
-        ByteBuffer bos = ByteBuffer.allocate(bufferSize);
-        bos.put(magicBytes);
-        ByteBuffer sizeBuf = ByteBuffer.allocate(messageSizeBufferSize);
-        sizeBuf.putInt(size);
-        bos.put(sizeBuf.array());
-        bos.put(clientMessage.toByteArray());
 
-        out.write(bos.array());
+        UnsafeByteArrayOutputStream bos = new UnsafeByteArrayOutputStream();
+        bos.write(magicBytes);
+
+        ByteBuffer sizeBuf = ByteBuffer.allocate(4);
+        sizeBuf.putInt(size);
+        bos.write(sizeBuf.array());
+
+        bos.write(clientMessage.toByteArray());
+        out.write(bos.toByteArray());
         out.flush();
+
+        System.out.println("sent: " + Hex.toHexString(bos.toByteArray()));
     }
 
     public Fusion.ServerMessage receiveMessage(double timeout) {
@@ -137,6 +142,7 @@ public class FusionClient {
             return Fusion.ServerMessage.parseFrom(readNBytes(in, bufferSize));
         } catch (IOException e) {
             e.printStackTrace();
+            listener.onFusionStatus(FusionStatus.FAILED);
         }
 
         return null;
@@ -242,7 +248,7 @@ public class FusionClient {
                 availableTiers.add(new Tier(tier));
             }
 
-            if(this.coins.isEmpty()) {
+            if(this.inputs.isEmpty()) {
                 System.out.println("Started with no coins");
                 return;
             }
@@ -252,7 +258,6 @@ public class FusionClient {
     }
 
     public void allocateOutputs() {
-        this.inputs = this.coins;
         long numInputs = this.inputs.size();
 
         long maxComponents = Math.min(numComponents, MAX_COMPONENTS);
@@ -331,6 +336,8 @@ public class FusionClient {
         }
 
         this.tierOutputs = tierOutputs;
+        this.safetySumIn = sumInputsValue;
+        this.safetyExcessFees = excessFees;
         System.out.println("Possible tiers: " + tierOutputs);
         this.registerAndWait();
     }
@@ -414,53 +421,63 @@ public class FusionClient {
             System.out.println("inputs: " + this.inputs);
             System.out.println("Registered for tiers.");
 
-            new Thread() {
-                @Override
-                public void run() {
-                    Fusion.ServerMessage serverMessage;
-                    while(true) {
-                        if(socket != null) {
-                            if(!socket.isClosed()) {
-                                serverMessage = receiveMessage(10);
-                                if (serverMessage != null) {
-                                    if (serverMessage.hasFusionbegin()) {
-                                        System.out.println("STARTING FUSION!");
-                                        break;
-                                    } else if (serverMessage.hasTierstatusupdate()) {
-                                        Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
-                                        poolStatuses = new ArrayList<>();
-                                        for (long tier : tierOutputs.keySet()) {
-                                            Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
-                                            PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
-                                            poolStatuses.add(poolStatus);
-                                        }
-                                    }
-                                }
-                            } else {
-                                fusionStatus = FusionStatus.FAILED;
+            Fusion.ServerMessage serverMessage;
+            while(true) {
+                try {
+                    serverMessage = receiveMessage(10);
+                    if (serverMessage != null) {
+                        if (serverMessage.hasFusionbegin()) {
+                            System.out.println("STARTING FUSION!");
+                            break;
+                        } else if (serverMessage.hasTierstatusupdate()) {
+                            Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
+                            poolStatuses = new ArrayList<>();
+                            for (long tier : tierOutputs.keySet()) {
+                                Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
+                                PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
+                                poolStatuses.add(poolStatus);
+                                this.listener.onPoolStatus(poolStatuses);
                             }
-                        } else {
-                            fusionStatus = FusionStatus.FAILED;
                         }
                     }
+                } catch(Exception e) {
+                    e.printStackTrace();
+                    listener.onFusionStatus(FusionStatus.FAILED);
+                }
+            }
 
-                    if(serverMessage.hasFusionbegin()) {
-                        CovertSubmitter covertSubmitter = startCovert(serverMessage);
+            if(serverMessage.hasFusionbegin()) {
+                Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
+                tFusionBegin = System.currentTimeMillis()/1000D;
+                double roundTime = fusionBegin.getServerTime();
+                double clockMismatch = roundTime - (System.currentTimeMillis()/1000D);
+                if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
+                    listener.onFusionStatus(FusionStatus.FAILED);
+                    return;
+                }
+                listener.onFusionStatus(FusionStatus.CREATING_TOR_CONNECTIONS);
+                CovertSubmitter covertSubmitter = startCovert(serverMessage);
+                this.safetyExcessFee = safetyExcessFees.get(serverMessage.getFusionbegin().getTier());
 
-                        while(true) {
-                            try {
-                                FusionStatus status = runRound(covertSubmitter);
-                                if(status == FusionStatus.FUSED || status == FusionStatus.FAILED)
-                                    break;
-                            } catch(Exception e) {
-                                e.printStackTrace();
-                                fusionStatus = FusionStatus.FAILED;
-                                break;
-                            }
+                while(true) {
+                    try {
+                        FusionStatus status = runRound(covertSubmitter);
+                        this.listener.onFusionStatus(status);
+                        if(status == FusionStatus.FUSED || status == FusionStatus.FAILED) {
+                            socket.close();
+                            covertSubmitter.closeConnections();
+                            break;
                         }
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                        socket.close();
+                        covertSubmitter.closeConnections();
+                        listener.onFusionStatus(FusionStatus.FAILED);
+                        break;
                     }
                 }
-            }.start();
+
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -468,11 +485,10 @@ public class FusionClient {
 
     private CovertSubmitter startCovert(Fusion.ServerMessage serverMessage) {
         Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
-        tFusionBegin = System.currentTimeMillis()/1000D;
         this.tier = fusionBegin.getTier();
         ArrayList<Long> outputs = tierOutputs.get(this.tier);
         for(long output : outputs) {
-            Address address = wallet.freshChangeAddress();
+            Address address = wallet.freshReceiveAddress();
             Script script = ScriptBuilder.createOutputScript(address);
             this.outputs.add(Pair.of(script, output));
         }
@@ -488,7 +504,6 @@ public class FusionClient {
 
         CovertSubmitter covertSubmitter = new CovertSubmitter(covertDomain, covertPort, this.numComponents, 6);
         covertSubmitter.scheduleConnections();
-        this.fusionStatus = FusionStatus.CREATING_TOR_CONNECTIONS;
 
         double tend = tFusionBegin + (WARMUP_TIME - WARMUP_SLOP - 1);
         double remTime = tend-(System.currentTimeMillis()/1000D);
@@ -506,7 +521,6 @@ public class FusionClient {
         Fusion.ServerMessage serverMessage = receiveMessage((2 * WARMUP_SLOP + STANDARD_TIMEOUT));
 
         if(serverMessage == null) {
-            this.fusionStatus = FusionStatus.FAILED;
             System.out.println("Could not receive message!");
             return FusionStatus.FAILED;
         }
@@ -515,19 +529,15 @@ public class FusionClient {
             Fusion.StartRound startRound = serverMessage.getStartround();
             covertT0 = System.currentTimeMillis()/1000D;
             long roundTime = startRound.getServerTime();
-            System.out.println("roundtime: " + roundTime);
-            System.out.println("ourtime: " + covertT0);
 
-            double clockMismatch = roundTime - covertT0;
+            double clockMismatch = roundTime - (System.currentTimeMillis()/1000D);
             if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
-                this.fusionStatus = FusionStatus.FAILED;
                 return FusionStatus.FAILED;
             }
 
             if(tFusionBegin != 0) {
                 double lag = covertT0 - tFusionBegin - WARMUP_TIME;
                 if(Math.abs(lag) > WARMUP_SLOP) {
-                    this.fusionStatus = FusionStatus.FAILED;
                     System.out.println("Warmup period too different from expectation");
                     return FusionStatus.FAILED;
                 }
@@ -539,7 +549,7 @@ public class FusionClient {
                 inputFees += componentFee(sizeOfInput(pair.getRight().getPubKey()), this.componentFeeRate);
             }
 
-            long outputFees = this.tierOutputs.get(tier).size() * componentFee(34, this.componentFeeRate);
+            long outputFees = this.outputs.size() * componentFee(34, this.componentFeeRate);
 
             long sumIn = 0;
             for(Pair<TransactionOutput, ECKey> pair : this.inputs) {
@@ -547,43 +557,51 @@ public class FusionClient {
             }
 
             long sumOut = 0;
-            for(long output : this.tierOutputs.get(this.tier)) {
-                sumOut += output;
+            for(Pair<Script, Long> output : this.outputs) {
+                sumOut += output.getRight();
             }
 
             long totalFee = sumIn - sumOut;
             long excessFee = totalFee - inputFees - outputFees;
-            if(excessFee > MAX_EXCESS_FEE) {
-                this.fusionStatus = FusionStatus.FAILED;
-                System.out.println("EXCESS FEE GREATER THAN MAX_EXCESS_FEE");
-                return FusionStatus.FAILED;
+            HashMap<String, Boolean> safetyChecks = new HashMap<>();
+            safetyChecks.put("SUMIN==SAFETYSUMIN", sumIn == this.safetySumIn);
+            safetyChecks.put("EXCESSFEE==SAFETYEXCESSFEE", excessFee == this.safetyExcessFee);
+            safetyChecks.put("EXCESSFEE<=MAXEXCESSFEE", excessFee <= MAX_EXCESS_FEE);
+            safetyChecks.put("TOTALFEE<=MAXFEE", totalFee <= MAX_FEE);
+            System.out.println("SUMIN==SAFETYSUMIN: " + sumIn + " vs. " + this.safetySumIn);
+            System.out.println("EXCESSFEE==SAFETYEXCESSFEE: " + excessFee + " vs. " + this.safetyExcessFee);
+            System.out.println("EXCESSFEE<=MAXEXCESSFEE: " + excessFee + " vs. " + MAX_EXCESS_FEE);
+            System.out.println("TOTALFEE<=MAXFEE: " + totalFee + " vs. " + MAX_FEE);
+            for(String check : safetyChecks.keySet()) {
+                boolean value = safetyChecks.get(check);
+                if(!value) {
+                    System.out.println("SAFETY CHECK FAILED! > " + check);
+                    return FusionStatus.FAILED;
+                }
             }
 
             byte[] roundPubKey = startRound.getRoundPubkey().toByteArray();
             List<ByteString> blindNoncePoints = startRound.getBlindNoncePointsList();
 
             if(blindNoncePoints.size() != this.numComponents) {
-                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("blind nonce miscount");
                 return FusionStatus.FAILED;
             }
 
-            long numBlanks = this.numComponents - this.inputs.size() - this.tierOutputs.get(this.tier).size();
+            long numBlanks = this.numComponents - this.inputs.size() - this.outputs.size();
 
-            this.fusionStatus = FusionStatus.GENERATING_COMPONENTS;
+            this.listener.onFusionStatus(FusionStatus.GENERATING_COMPONENTS);
             GeneratedComponents generatedComponents = genComponents(numBlanks, this.inputs, this.outputs, componentFeeRate);
             if(!BigInteger.valueOf(excessFee).equals(generatedComponents.getSumAmounts())) {
-                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("excess fee does not equal pedersen amount");
                 return FusionStatus.FAILED;
             }
             if(blindNoncePoints.size() != generatedComponents.getComponents().size()) {
-                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("Error! Mismatched size! " + blindNoncePoints.size() + " vs. " + generatedComponents.getComponents().size());
                 return FusionStatus.FAILED;
             }
 
-            this.fusionStatus = FusionStatus.MAKING_COMMITMENTS;
+            this.listener.onFusionStatus(FusionStatus.MAKING_COMMITMENTS);
             ArrayList<ByteString> myCommitments = new ArrayList<>();
             ArrayList<ByteString> myComponents = new ArrayList<>();
             ArrayList<ByteString> blindSignatureRequestsByteString = new ArrayList<>();
@@ -624,12 +642,11 @@ public class FusionClient {
                 return FusionStatus.FAILED;
             }
 
-            this.fusionStatus = FusionStatus.SUBMITTING_COMMITMENTS;
+            this.listener.onFusionStatus(FusionStatus.SUBMITTING_COMMITMENTS);
             this.sendMessage(clientMessage);
 
             Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(covertT0 + 5);
             if(blindSigServerMessage == null) {
-                this.fusionStatus = FusionStatus.FAILED;
                 System.out.println("blindSigServerMessage1 is null");
                 return FusionStatus.FAILED;
             }
@@ -643,17 +660,18 @@ public class FusionClient {
                 }
 
                 if(scalars.size() != blindSignatureRequests.size()) {
-                    this.fusionStatus = FusionStatus.FAILED;
                     System.out.println("scalars != blindSigRequests: " + scalars.size() + " vs. " + blindSignatureRequests.size());
                     return FusionStatus.FAILED;
                 }
 
-                this.fusionStatus = FusionStatus.PRODUCING_BLIND_SIGNATURES;
+                this.listener.onFusionStatus(FusionStatus.PRODUCING_BLIND_SIGNATURES);
                 ArrayList<byte[]> blindSigs = new ArrayList<>();
                 for(int x = 0; x < scalars.size(); x++) {
                     SchnorrBlindSignatureRequest r = blindSignatureRequests.get(x);
                     byte[] sig = r.blindFinalize(scalars.get(x));
-                    blindSigs.add(sig);
+                    if(sig != null) {
+                        blindSigs.add(sig);
+                    }
                 }
 
                 double remTime = 5d - covertClock();
@@ -661,10 +679,9 @@ public class FusionClient {
                     System.out.println("Arrived at covert-component phase too slowly.");
                 }
                 System.out.println("Remtime: " + remTime);
-                Thread.sleep((int)(remTime * 1000D));
+                Thread.sleep((int)(remTime*1000D));
 
                 if(myComponents.size() != blindSigs.size()) {
-                    this.fusionStatus = FusionStatus.FAILED;
                     System.out.println("My components size != blind Sigs size!");
                     return FusionStatus.FAILED;
                 }
@@ -684,10 +701,10 @@ public class FusionClient {
                     covertMessages.add(covertMessage);
                 }
 
-                this.fusionStatus = FusionStatus.COVERTLY_SENDING_COMPONENTS;
+                listener.onFusionStatus(FusionStatus.COVERTLY_SENDING_COMPONENTS);
                 covertSubmitter.scheduleSubmissions(covertMessages, covertT0 + 5, covertT0 + 15);
 
-                this.fusionStatus = FusionStatus.RECEIVING_ALL_COMMITMENTS;
+                listener.onFusionStatus(FusionStatus.RECEIVING_ALL_COMMITMENTS);
                 Fusion.ServerMessage allCommitmentsServerMsg = this.receiveMessage(+20);
                 if(allCommitmentsServerMsg.hasAllcommitments()) {
                     System.out.println("Has all commitments msg");
@@ -698,18 +715,16 @@ public class FusionClient {
                         try {
                             int index = allCommitments.indexOf(commitment);
                             if(index == -1) {
-                                this.fusionStatus = FusionStatus.FAILED;
                                 System.out.println("missing commitment");
                                 return FusionStatus.FAILED;
                             }
                         } catch(Exception e) {
-                            this.fusionStatus = FusionStatus.FAILED;
                             System.out.println("missing commitment");
                             return FusionStatus.FAILED;
                         }
                     }
 
-                    this.fusionStatus = FusionStatus.RECEIVING_ALL_COMPONENTS;
+                    listener.onFusionStatus(FusionStatus.RECEIVING_ALL_COMPONENTS);
                     Fusion.ServerMessage shareCovertComponentsServerMsg = this.receiveMessage(+20);
                     if(shareCovertComponentsServerMsg.hasSharecovertcomponents()) {
                         Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
@@ -722,6 +737,7 @@ public class FusionClient {
                             return FusionStatus.FAILED;
                         }
 
+                        ArrayList<Integer> componentIdxes = new ArrayList<>();
                         for(ByteString component : myComponents) {
                             try {
                                 int index = allComponents.indexOf(component);
@@ -730,6 +746,7 @@ public class FusionClient {
                                     return FusionStatus.FAILED;
                                 } else {
                                     System.out.println("has component!");
+                                    componentIdxes.add(index);
                                 }
                             } catch(Exception e) {
                                 System.out.println("missing component");
@@ -750,15 +767,19 @@ public class FusionClient {
                             System.out.println("Submitting signatures...");
                             Transaction tx = constructTransaction(allComponents, sessionHash);
                             ArrayList<Fusion.CovertMessage> covertSignatureMessages = new ArrayList<>();
-                            this.fusionStatus = FusionStatus.SIGNING;
+                            listener.onFusionStatus(FusionStatus.SIGNING);
                             for(TransactionInput input : tx.getInputs()) {
                                 TransactionOutput output = input.findConnectedOutput(wallet);
-                                if(output == null)
+                                if(output == null) {
+                                    System.out.println("OUTPUT IS NULL!");
                                     continue;
+                                }
 
                                 Address address = output.getAddressFromP2PKHScript(wallet.getParams());
-                                if(address == null)
+                                if(address == null) {
+                                    System.out.println("ADDRESS IS NULL!");
                                     continue;
+                                }
 
                                 ECKey key = wallet.findKeyFromAddress(address);
                                 if(output.isMine(wallet)) {
@@ -786,25 +807,27 @@ public class FusionClient {
                             }
 
                             System.out.println("Scheduling signature submission");
-                            this.fusionStatus = FusionStatus.COVERTLY_SENDING_SIGNATURES;
+                            listener.onFusionStatus(FusionStatus.COVERTLY_SENDING_SIGNATURES);
                             covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20, covertT0 + 30);
                             Fusion.ServerMessage resultServerMessage = this.receiveMessage(20);
                             if(resultServerMessage != null) {
                                 Fusion.FusionResult result = resultServerMessage.getFusionresult();
                                 if(result.getOk()) {
-                                    this.fusionStatus = FusionStatus.FUSED;
                                     return FusionStatus.FUSED;
                                 } else {
-                                    this.fusionStatus = FusionStatus.FAILED;
+                                    System.out.println("BAD COMPONENTS::");
+                                    System.out.println(componentIdxes);
+                                    System.out.println(result.getBadComponentsList());
+                                    System.out.println(result.getTxsignaturesList());
                                     return FusionStatus.FAILED;
                                 }
                             } else {
-                                this.fusionStatus = FusionStatus.FAILED;
+                                System.out.println("FUSION RESULT NULL");
                                 return FusionStatus.FAILED;
                             }
                         } else {
-                            this.fusionStatus = FusionStatus.FAILED;
                             System.out.println("SKipping signatures");
+                            System.out.println(shareCovertComponentsMsg);
                             return FusionStatus.FAILED;
                         }
                     } else {
@@ -820,11 +843,9 @@ public class FusionClient {
                 System.out.println(blindSigServerMessage);
             }
 
-            this.fusionStatus = FusionStatus.FAILED;
             return FusionStatus.FAILED;
         }
 
-        this.fusionStatus = FusionStatus.FAILED;
         return FusionStatus.FAILED;
     }
 
@@ -1045,9 +1066,7 @@ public class FusionClient {
             }
         }
 
-        System.out.println("TX::");
         System.out.println(tx.toHexString());
-        System.out.println(tx.toString());
         return tx;
     }
 }

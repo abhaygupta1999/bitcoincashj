@@ -36,7 +36,7 @@ public class CovertClient {
             @Override
             public void run() {
                 try {
-                    SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9050);
+                    SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
                     Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
                     Socket socket = new Socket(proxy);
                     socket.setTcpNoDelay(true);
@@ -75,10 +75,9 @@ public class CovertClient {
     private void ping() throws IOException {
         Fusion.Ping ping = Fusion.Ping.newBuilder()
                 .build();
-        Fusion.CovertMessage covertMessage = Fusion.CovertMessage.newBuilder()
+        this.msg = Fusion.CovertMessage.newBuilder()
                 .setPing(ping)
                 .build();
-        this.msg = covertMessage;
         this.submit(msg);
     }
 

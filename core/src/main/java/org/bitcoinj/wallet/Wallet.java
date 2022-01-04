@@ -4372,11 +4372,7 @@ public class Wallet extends BaseTaggableObject
             // we don't have the keys for.
             List<TransactionOutput> candidates;
             if (req.utxos == null || req.utxos.size() == 0) {
-                if(req.spendOnlyFused) {
-                    candidates = calculateAllSpendCandidates(true, req.missingSigsMode == MissingSigsMode.THROW);
-                } else {
-                    candidates = calculateAllSpendCandidates(true, false, false, false);
-                }
+                candidates = calculateAllSpendCandidates(true, req.missingSigsMode == MissingSigsMode.THROW);
             } else {
                 candidates = req.utxos;
             }
@@ -4535,45 +4531,29 @@ public class Wallet extends BaseTaggableObject
      * (in this case the existence or not of private keys is ignored), or the wallets internal storage (the default)
      * taking into account the flags.
      *
-     * @param onlyFused Only selects UTXOs whose transaction is a CashFusion transaction.
      * @param excludeImmatureCoinbases Whether to ignore coinbase outputs that we will be able to spend in future once they mature.
      * @param excludeUnsignable        Whether to ignore outputs that we are tracking but don't have the keys to sign for.
      */
-    public List<TransactionOutput> calculateAllSpendCandidates(boolean onlyFused, boolean excludeImmatureCoinbases, boolean excludeUnsignable, boolean includeDust) {
+    public List<TransactionOutput> calculateAllSpendCandidates(boolean excludeImmatureCoinbases, boolean excludeUnsignable, boolean includeDust) {
         lock.lock();
         try {
             List<TransactionOutput> candidates;
             if (vUTXOProvider == null) {
                 candidates = new ArrayList<TransactionOutput>(myUnspents.size());
                 for (TransactionOutput output : myUnspents) {
-                    if(!onlyFused) {
-                        if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
-                        Transaction transaction = checkNotNull(output.getParentTransaction());
-                        if (excludeImmatureCoinbases && !transaction.isMature())
-                            continue;
+                    if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
+                    Transaction transaction = checkNotNull(output.getParentTransaction());
+                    if (excludeImmatureCoinbases && !transaction.isMature())
+                        continue;
 
-                        if (output.isFrozen()) {
-                            continue;
-                        }
+                    if(output.isFrozen()) {
+                        continue;
+                    }
 
-                        if (output.getValue().value != 546L) {
-                            candidates.add(output);
-                        } else if (includeDust) {
-                            candidates.add(output);
-                        }
-                    } else {
-                        if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
-                        Transaction transaction = checkNotNull(output.getParentTransaction());
-                        if (excludeImmatureCoinbases && !transaction.isMature())
-                            continue;
-
-                        if (output.isFrozen()) {
-                            continue;
-                        }
-
-                        if(ScriptPattern.isCashFusion(output.getParentTransaction())) {
-                            candidates.add(output);
-                        }
+                    if (output.getValue().value != 546L) {
+                        candidates.add(output);
+                    } else if (includeDust) {
+                        candidates.add(output);
                     }
                 }
             } else {
@@ -4614,7 +4594,7 @@ public class Wallet extends BaseTaggableObject
     }
 
     public List<TransactionOutput> calculateAllSpendCandidates(boolean excludeImmatureCoinbases, boolean excludeUnsignable) {
-        return this.calculateAllSpendCandidates(false, excludeImmatureCoinbases, excludeUnsignable, false);
+        return this.calculateAllSpendCandidates(excludeImmatureCoinbases, excludeUnsignable, false);
     }
 
     public List<TransactionOutput> calculateSpendCandidatesForAddress(Address address, boolean excludeImmatureCoinbases, boolean excludeUnsignable) {
@@ -4760,7 +4740,7 @@ public class Wallet extends BaseTaggableObject
     }
 
     public List<TransactionOutput> getUtxos() {
-        return this.calculateAllSpendCandidates(false, false, true, false);
+        return this.calculateAllSpendCandidates(false, true, false);
     }
     //endregion
 
