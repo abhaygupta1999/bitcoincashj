@@ -64,8 +64,6 @@ public class FusionClient {
     private double tFusionBegin = 0;
     private double covertT0 = 0;
 
-    public ArrayList<PoolStatus> poolStatuses = new ArrayList<>();
-
     private FusionListener listener;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet, FusionListener listener) throws IOException {
@@ -106,7 +104,6 @@ public class FusionClient {
         this.covertT0 = 0;
         this.tier = 0;
         this.listener.onFusionStatus(FusionStatus.NOT_FUSING);
-        this.poolStatuses = new ArrayList<>();
         this.availableTiers = new ArrayList<>();
         this.inputs = new ArrayList<>();
         this.tierOutputs = new HashMap<>();
@@ -431,7 +428,7 @@ public class FusionClient {
                             break;
                         } else if (serverMessage.hasTierstatusupdate()) {
                             Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
-                            poolStatuses = new ArrayList<>();
+                            ArrayList<PoolStatus> poolStatuses = new ArrayList<>();
                             for (long tier : tierOutputs.keySet()) {
                                 Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
                                 PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
