@@ -433,8 +433,8 @@ public class FusionClient {
                                 Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
                                 PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
                                 poolStatuses.add(poolStatus);
-                                this.listener.onPoolStatus(poolStatuses);
                             }
+                            this.listener.onPoolStatus(poolStatuses);
                         }
                     }
                 } catch(Exception e) {
