@@ -475,8 +475,9 @@ public class FusionClient {
                                 e.printStackTrace();
                                 try {
                                     socket.close();
-                                } catch (IOException ioException) {
-                                    ioException.printStackTrace();
+                                } catch (Exception genericException) {
+                                    genericException.printStackTrace();
+                                    //we dont really care about the type of exception here
                                 }
                                 covertSubmitter.closeConnections();
                                 listener.onFusionStatus(FusionStatus.FAILED);
