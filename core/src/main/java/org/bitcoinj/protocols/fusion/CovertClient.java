@@ -36,7 +36,7 @@ public class CovertClient {
             @Override
             public void run() {
                 try {
-                    SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9150);
+                    SocketAddress proxyAddr = new InetSocketAddress("127.0.0.1", 9050);
                     Proxy proxy = new Proxy(Proxy.Type.SOCKS, proxyAddr);
                     Socket socket = new Socket(proxy);
                     socket.setTcpNoDelay(true);
