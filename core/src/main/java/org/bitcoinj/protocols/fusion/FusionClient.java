@@ -445,7 +445,10 @@ public class FusionClient {
                             }
                         } catch(Exception e) {
                             e.printStackTrace();
+                            serverMessage = null;
+                            registeredAndWaiting = false;
                             listener.onFusionStatus(FusionStatus.FAILED);
+                            break;
                         }
                     }
 
