@@ -4565,6 +4565,40 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
+    public List<TransactionOutput> calculateAllFusionCandidates(boolean excludeImmatureCoinbases, boolean excludeUnsignable, boolean includeDust) {
+        lock.lock();
+        try {
+            List<TransactionOutput> candidates;
+            if (vUTXOProvider == null) {
+                candidates = new ArrayList<TransactionOutput>(myUnspents.size());
+                for (TransactionOutput output : myUnspents) {
+                    if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
+                    Transaction transaction = checkNotNull(output.getParentTransaction());
+                    if (excludeImmatureCoinbases && !transaction.isMature())
+                        continue;
+
+                    if(output.isFrozen()) {
+                        continue;
+                    }
+
+                    if(!ScriptPattern.isCashFusion(transaction))
+                        continue;
+
+                    if (output.getValue().value != 546L) {
+                        candidates.add(output);
+                    } else if (includeDust) {
+                        candidates.add(output);
+                    }
+                }
+            } else {
+                candidates = calculateAllSpendCandidatesFromUTXOProvider(excludeImmatureCoinbases);
+            }
+            return candidates;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     public List<TransactionOutput> getAllDustUtxos(boolean excludeImmatureCoinbases, boolean excludeUnsignable) {
         lock.lock();
         try {

@@ -17,10 +17,10 @@
 
 package org.bitcoinj.script;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.Utils;
+import org.bitcoinj.core.*;
+import org.bouncycastle.util.encoders.Hex;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -155,6 +155,18 @@ public class ScriptPattern {
         return mOpCode >= OP_1 && mOpCode <= OP_16;
     }
 
+    public static boolean isCashFusion(Transaction tx) {
+        TransactionOutput output = tx.getOutput(0);
+        if(ScriptPattern.isOpReturn(output.getScriptPubKey())) {
+            byte[] data = output.getScriptPubKey().getChunks().get(1).data;
+            if(data != null) {
+                String protocolCode = new String(Hex.encode(data), StandardCharsets.UTF_8);
+                return protocolCode.equals("46555a00");
+            }
+        }
+
+        return false;
+    }
     /**
      * Returns whether this script is using OP_RETURN to store arbitrary data.
      */
