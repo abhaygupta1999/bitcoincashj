@@ -19,6 +19,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.*;
 import java.math.BigInteger;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -66,7 +67,7 @@ public class FusionClient {
 
     private FusionListener listener;
 
-    public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet, FusionListener listener) throws IOException {
+    public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet, FusionListener listener) throws Exception {
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
         SSLSocket socket = (SSLSocket)factory.createSocket(host, port);
         socket.setTcpNoDelay(true);
@@ -90,7 +91,7 @@ public class FusionClient {
         greet();
     }
 
-    public FusionClient updateUtxos(ArrayList<TransactionOutput> coins) throws IOException {
+    public FusionClient updateUtxos(ArrayList<TransactionOutput> coins) throws Exception {
         System.out.println("Updating utxos...");
         this.out.close();
         this.in.close();
@@ -129,20 +130,13 @@ public class FusionClient {
         System.out.println("sent: " + Hex.toHexString(bos.toByteArray()));
     }
 
-    public Fusion.ServerMessage receiveMessage(double timeout) {
-        try {
-            this.socket.setSoTimeout((int)(timeout*1000D));
-            byte[] prefixBytes = readNBytes(in, 12);
-            if (prefixBytes.length == 0) return null;
-            byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
-            int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
-            return Fusion.ServerMessage.parseFrom(readNBytes(in, bufferSize));
-        } catch (IOException e) {
-            e.printStackTrace();
-            listener.onFusionStatus(FusionStatus.FAILED);
-        }
-
-        return null;
+    public Fusion.ServerMessage receiveMessage(double timeout) throws Exception {
+        this.socket.setSoTimeout((int)(timeout*1000D));
+        byte[] prefixBytes = readNBytes(in, 12);
+        if (prefixBytes.length == 0) return null;
+        byte[] sizeBytes = Arrays.copyOfRange(prefixBytes, 8, 12);
+        int bufferSize = ByteBuffer.wrap(sizeBytes).getInt();
+        return Fusion.ServerMessage.parseFrom(readNBytes(in, bufferSize));
     }
 
     public byte[] readNBytes(BufferedInputStream in, int len) throws IOException {
@@ -219,7 +213,7 @@ public class FusionClient {
         socket = null;
     }
 
-    public void greet() throws IOException {
+    public void greet() throws Exception {
         //construct clientHello message to greet server
         Fusion.ClientHello clientHello = Fusion.ClientHello.newBuilder()
                 .setVersion(ByteString.copyFrom("alpha13".getBytes()))
