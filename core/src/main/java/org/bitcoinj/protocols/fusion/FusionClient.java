@@ -59,7 +59,6 @@ public class FusionClient {
 
     private byte[] lastHash;
     private byte[] sessionHash;
-    private boolean registeredAndWaiting = false;
 
     //TIME VARIABLES
     private double tFusionBegin = 0;
@@ -215,7 +214,6 @@ public class FusionClient {
         in.close();
         out.close();
         socket.close();
-        registeredAndWaiting = false;
         in = null;
         out = null;
         socket = null;
@@ -419,73 +417,70 @@ public class FusionClient {
             this.sendMessage(clientMessage);
             System.out.println("inputs: " + this.inputs);
             System.out.println("Registered for tiers.");
-            registeredAndWaiting = true;
-            new Thread() {
-                @Override
-                public void run() {
-                    Fusion.ServerMessage serverMessage = null;
-                    while(registeredAndWaiting) {
-                        try {
-                            serverMessage = receiveMessage(10);
-                            if (serverMessage != null) {
-                                if (serverMessage.hasFusionbegin()) {
-                                    System.out.println("STARTING FUSION!");
-                                    registeredAndWaiting = false;
-                                    break;
-                                } else if (serverMessage.hasTierstatusupdate()) {
-                                    Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
-                                    ArrayList<PoolStatus> poolStatuses = new ArrayList<>();
-                                    for (long tier : tierOutputs.keySet()) {
-                                        Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
-                                        PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
-                                        poolStatuses.add(poolStatus);
-                                    }
-                                    listener.onPoolStatus(poolStatuses);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        new Thread() {
+            @Override
+            public void run() {
+                Fusion.ServerMessage serverMessage = null;
+                while(true) {
+                    try {
+                        serverMessage = receiveMessage(10);
+                        if (serverMessage != null) {
+                            if (serverMessage.hasFusionbegin()) {
+                                System.out.println("STARTING FUSION!");
+                                break;
+                            } else if (serverMessage.hasTierstatusupdate()) {
+                                Fusion.TierStatusUpdate update = serverMessage.getTierstatusupdate();
+                                ArrayList<PoolStatus> poolStatuses = new ArrayList<>();
+                                for (long tier : tierOutputs.keySet()) {
+                                    Fusion.TierStatusUpdate.TierStatus status = update.getStatusesOrThrow(tier);
+                                    PoolStatus poolStatus = new PoolStatus(tier, status.getPlayers(), status.getMinPlayers(), status.getTimeRemaining());
+                                    poolStatuses.add(poolStatus);
                                 }
+                                listener.onPoolStatus(poolStatuses);
                             }
-                        } catch(Exception e) {
+                        }
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                        serverMessage = null;
+                        listener.onFusionStatus(FusionStatus.FAILED);
+                        break;
+                    }
+                }
+
+                if (serverMessage != null && serverMessage.hasFusionbegin()) {
+                    Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
+                    tFusionBegin = System.currentTimeMillis() / 1000D;
+                    double roundTime = fusionBegin.getServerTime();
+                    double clockMismatch = roundTime - (System.currentTimeMillis() / 1000D);
+                    if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
+                        listener.onFusionStatus(FusionStatus.FAILED);
+                        return;
+                    }
+                    listener.onFusionStatus(FusionStatus.CREATING_TOR_CONNECTIONS);
+                    CovertSubmitter covertSubmitter = startCovert(serverMessage);
+                    safetyExcessFee = safetyExcessFees.get(serverMessage.getFusionbegin().getTier());
+
+                    while (true) {
+                        try {
+                            FusionStatus status = runRound(covertSubmitter);
+                            listener.onFusionStatus(status);
+                            if (status == FusionStatus.FUSED || status == FusionStatus.FAILED) {
+                                socket.close();
+                                covertSubmitter.closeConnections();
+                                break;
+                            }
+                        } catch (Exception e) {
                             e.printStackTrace();
-                            serverMessage = null;
-                            registeredAndWaiting = false;
-                            listener.onFusionStatus(FusionStatus.FAILED);
                             break;
                         }
                     }
 
-                    if (serverMessage != null && serverMessage.hasFusionbegin()) {
-                        Fusion.FusionBegin fusionBegin = serverMessage.getFusionbegin();
-                        tFusionBegin = System.currentTimeMillis() / 1000D;
-                        double roundTime = fusionBegin.getServerTime();
-                        double clockMismatch = roundTime - (System.currentTimeMillis() / 1000D);
-                        if (Math.abs(clockMismatch) > MAX_CLOCK_DISCREPANCY) {
-                            listener.onFusionStatus(FusionStatus.FAILED);
-                            return;
-                        }
-                        listener.onFusionStatus(FusionStatus.CREATING_TOR_CONNECTIONS);
-                        CovertSubmitter covertSubmitter = startCovert(serverMessage);
-                        safetyExcessFee = safetyExcessFees.get(serverMessage.getFusionbegin().getTier());
-
-                        while (true) {
-                            try {
-                                FusionStatus status = runRound(covertSubmitter);
-                                listener.onFusionStatus(status);
-                                if (status == FusionStatus.FUSED || status == FusionStatus.FAILED) {
-                                    socket.close();
-                                    covertSubmitter.closeConnections();
-                                    break;
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                                break;
-                            }
-                        }
-
-                    }
                 }
-            }.start();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+            }
+        }.start();
     }
 
     private CovertSubmitter startCovert(Fusion.ServerMessage serverMessage) {
