@@ -482,7 +482,7 @@ public class FusionClient {
         this.tier = fusionBegin.getTier();
         ArrayList<Long> outputs = tierOutputs.get(this.tier);
         for(long output : outputs) {
-            Address address = wallet.freshReceiveAddress();
+            Address address = wallet.freshFusionAddress();
             Script script = ScriptBuilder.createOutputScript(address);
             this.outputs.add(Pair.of(script, output));
         }

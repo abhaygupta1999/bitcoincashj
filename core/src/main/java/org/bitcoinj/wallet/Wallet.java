@@ -658,11 +658,27 @@ public class Wallet extends BaseTaggableObject
         return key;
     }
 
+    public Address freshFusionAddress(KeyChain.KeyPurpose purpose) {
+        Address key;
+        keyChainGroupLock.lock();
+        try {
+            key = keyChainGroup.freshFusionAddress(purpose);
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+        saveNow();
+        return key;
+    }
+
     /**
      * An alias for calling {@link #freshAddress(org.bitcoinj.wallet.KeyChain.KeyPurpose)} with
      * {@link org.bitcoinj.wallet.KeyChain.KeyPurpose#RECEIVE_FUNDS} as the parameter.
      */
     public Address freshReceiveAddress() {
+        return freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
+    }
+
+    public Address freshFusionAddress() {
         return freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
     }
 
