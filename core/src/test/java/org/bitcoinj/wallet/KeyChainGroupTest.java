@@ -655,4 +655,32 @@ public class KeyChainGroupTest {
         group.encrypt(KEY_CRYPTER, AES_KEY);
         group.decrypt(AES_KEY);
     }
+
+    @Test
+    public void fusionUpgradeUnencrypted() throws Exception {
+        // Check that a group that contains only random keys has its HD chain created using the private key bytes of
+        // the oldest random key, so upgrading the same wallet twice gives the same outcome.
+        group = KeyChainGroup.builder(MAINNET).fromRandomNonFusion(Script.ScriptType.P2PKH).build();
+        assertTrue(group.isFusionUpgradeRequired());
+        DeterministicSeed seed1 = group.getNormalChain().getSeed();
+        List<Protos.Key> protobufs = group.serializeToProtobuf();
+        DeterministicKey rkey1 = group.freshKey(KeyPurpose.RECEIVE_FUNDS);
+        assertNotNull(seed1);
+
+        group.upgradeToFusion(group.getActiveKeyChain(), ScriptType.P2PKH, KeyChainGroupStructure.DEFAULT, 0, null);
+        assertFalse(group.isEncrypted());
+        assertFalse(group.isFusionUpgradeRequired());
+        DeterministicKey fkey1 = group.freshKey(KeyChain.KeyPurpose.FUSION);
+
+        group = KeyChainGroup.fromProtobufUnencrypted(MAINNET, protobufs);
+        group.upgradeToFusion(group.getActiveKeyChain(), ScriptType.P2PKH, KeyChainGroupStructure.DEFAULT, 0, null);  // Should give same result as last time.
+        assertFalse(group.isEncrypted());
+        assertFalse(group.isFusionUpgradeRequired());
+        DeterministicKey rkey2 = group.freshKey(KeyPurpose.RECEIVE_FUNDS);
+        DeterministicKey fkey2 = group.freshKey(KeyPurpose.FUSION);
+        DeterministicSeed seed2 = group.getFusionChain().getSeed();
+        assertEquals(seed1, seed2);
+        assertEquals(rkey1, rkey2);
+        assertEquals(fkey1, fkey2);
+    }
 }

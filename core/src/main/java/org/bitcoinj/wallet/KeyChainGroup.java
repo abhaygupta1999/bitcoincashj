@@ -101,6 +101,17 @@ public class KeyChainGroup implements KeyBag {
             return this;
         }
 
+        public Builder fromRandomNonFusion(Script.ScriptType outputScriptType) {
+            DeterministicSeed seed = new DeterministicSeed(new SecureRandom(),
+                    DeterministicSeed.DEFAULT_SEED_ENTROPY_BITS, "");
+            DeterministicKeyChain chain = DeterministicKeyChain.builder().seed(seed)
+                    .outputScriptType(Script.ScriptType.P2PKH)
+                    .accountPath(structure.accountPathFor(Script.ScriptType.P2PKH)).build();
+            this.chains.clear();
+            this.chains.add(chain);
+            return this;
+        }
+
         /**
          * <p>Add chain from a given seed.</p>
          * <p>In the case of P2PKH, just a P2PKH chain is created and activated which is then the default chain for fresh
@@ -452,7 +463,6 @@ public class KeyChainGroup implements KeyBag {
         checkState(isSupportsDeterministicChains(), "doesn't support deterministic chains");
         if (chains.isEmpty())
             throw new DeterministicUpgradeRequiredException();
-
         return getNormalChain();
     }
 
@@ -985,10 +995,6 @@ public class KeyChainGroup implements KeyBag {
             currentKeys = createCurrentKeysMap(normalChain, chains);
         }
 
-        if(!fusionChainExists && normalChain != null) {
-            throw new FusionUpgradeRequiredException();
-        }
-
         extractFollowingKeychains(chains);
         return new KeyChainGroup(params, basicKeyChain, chains, lookaheadSize, lookaheadThreshold, currentKeys, null);
     }
@@ -1022,10 +1028,6 @@ public class KeyChainGroup implements KeyBag {
             lookaheadSize = activeChain.getLookaheadSize();
             lookaheadThreshold = activeChain.getLookaheadThreshold();
             currentKeys = createCurrentKeysMap(normalChain, chains);
-        }
-
-        if(!fusionChainExists && normalChain != null) {
-            throw new FusionUpgradeRequiredException();
         }
 
         extractFollowingKeychains(chains);
@@ -1135,6 +1137,12 @@ public class KeyChainGroup implements KeyBag {
         if (!isSupportsDeterministicChains())
             return false;
         return getActiveKeyChain(preferredScriptType, keyRotationTimeSecs) == null;
+    }
+
+    public boolean isFusionUpgradeRequired() {
+        if (!isSupportsDeterministicChains())
+            return true;
+        return getKeyChainForPurpose(KeyChain.KeyPurpose.FUSION) == null;
     }
 
     private static EnumMap<KeyChain.KeyPurpose, DeterministicKey> createCurrentKeysMap(DeterministicKeyChain activeChain, List<DeterministicKeyChain> chains) {
