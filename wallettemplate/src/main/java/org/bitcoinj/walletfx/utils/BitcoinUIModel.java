@@ -1,6 +1,6 @@
 /*
  * Copyright by the original author or authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
-package wallettemplate.utils;
+package org.bitcoinj.walletfx.utils;
 
+import org.bitcoinj.core.Address;
+import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.listeners.DownloadProgressTracker;
+import org.bitcoinj.wallet.Wallet;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleObjectProperty;
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.listeners.DownloadProgressTracker;
-import org.bitcoinj.wallet.Wallet;
-import org.bitcoinj.wallet.listeners.CurrentKeyChangeEventListener;
-import org.bitcoinj.wallet.listeners.WalletChangeEventListener;
 
 import java.util.Date;
 
@@ -48,13 +46,13 @@ public class BitcoinUIModel {
 
     public final void setWallet(Wallet wallet) {
         wallet.addChangeEventListener(Platform::runLater, w -> updateBalance(wallet));
-        wallet.addCurrentAddressChangeEventListener(Platform::runLater, () -> updateAddress(wallet));
+        wallet.addCurrentKeyChangeEventListener(Platform::runLater, () -> updateAddress(wallet));
         updateBalance(wallet);
         updateAddress(wallet);
     }
 
     private void updateBalance(Wallet wallet) {
-        balance.set(wallet.getBalance(Wallet.BalanceType.ESTIMATED));
+        balance.set(wallet.getBalance());
     }
 
     private void updateAddress(Wallet wallet) {
@@ -75,13 +73,9 @@ public class BitcoinUIModel {
         }
     }
 
-    public DownloadProgressTracker getDownloadProgressTracker() {
-        return syncProgressUpdater;
-    }
+    public DownloadProgressTracker getDownloadProgressTracker() { return syncProgressUpdater; }
 
-    public ReadOnlyDoubleProperty syncProgressProperty() {
-        return syncProgress;
-    }
+    public ReadOnlyDoubleProperty syncProgressProperty() { return syncProgress; }
 
     public ReadOnlyObjectProperty<Address> addressProperty() {
         return address;

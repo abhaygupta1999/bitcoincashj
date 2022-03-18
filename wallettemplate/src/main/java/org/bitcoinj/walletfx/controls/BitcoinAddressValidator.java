@@ -1,6 +1,6 @@
 /*
  * Copyright by the original author or authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package wallettemplate.controls;
+package org.bitcoinj.walletfx.controls;
 
-import javafx.scene.Node;
-import javafx.scene.control.TextField;
+import org.bitcoinj.core.Address;
 import org.bitcoinj.core.AddressFactory;
 import org.bitcoinj.core.AddressFormatException;
 import org.bitcoinj.core.NetworkParameters;
-import wallettemplate.utils.TextFieldValidator;
+
+import javafx.scene.Node;
+import javafx.scene.control.TextField;
+import org.bitcoinj.walletfx.utils.TextFieldValidator;
 
 /**
  * Given a text field, some network params and optionally some nodes, will make the text field an angry red colour
@@ -44,21 +46,15 @@ public class BitcoinAddressValidator {
     }
 
     private void toggleButtons(String current) {
-        if (!current.isEmpty()) {
-            boolean valid = testAddr(current);
-            for (Node n : nodes) n.setDisable(!valid);
-        }
+        boolean valid = testAddr(current);
+        for (Node n : nodes) n.setDisable(!valid);
     }
 
     private boolean testAddr(String text) {
-        if (!text.isEmpty()) {
-            try {
-                AddressFactory.create().getAddress(params, text);
-                return true;
-            } catch (AddressFormatException e) {
-                return false;
-            }
-        } else {
+        try {
+            AddressFactory.create().getAddress(params, text);
+            return true;
+        } catch (AddressFormatException e) {
             return false;
         }
     }
