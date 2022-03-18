@@ -502,6 +502,7 @@ public class DeterministicKeyChain implements EncryptableKeyChain {
                 // (i.e. spends) or refunds. Might be useful for auditing ...
                 case RECEIVE_FUNDS:
                 case REFUND:
+                case FUSION:
                     issuedExternalKeys += numberOfKeys;
                     index = issuedExternalKeys;
                     parentKey = externalParentKey;

@@ -333,7 +333,7 @@ public class KeyChainGroup implements KeyBag {
      * to get a proper P2SH address</p>
      */
     public DeterministicKey currentKey(KeyChain.KeyPurpose purpose) {
-        DeterministicKeyChain chain = getActiveKeyChain();
+        DeterministicKeyChain chain = getKeyChainForPurpose(purpose);
         if (chain.isMarried()) {
             throw new UnsupportedOperationException("Key is not suitable to receive coins for married keychains." +
                     " Use freshAddress to get P2SH address instead");
@@ -350,7 +350,7 @@ public class KeyChainGroup implements KeyBag {
      * Returns address for a {@link #currentKey(KeyChain.KeyPurpose)}
      */
     public Address currentAddress(KeyChain.KeyPurpose purpose) {
-        DeterministicKeyChain chain = getActiveKeyChain();
+        DeterministicKeyChain chain = getKeyChainForPurpose(purpose);
         if (chain.isMarried()) {
             Address current = currentAddresses.get(purpose);
             if (current == null) {
@@ -379,10 +379,6 @@ public class KeyChainGroup implements KeyBag {
         return freshKeys(purpose, 1).get(0);
     }
 
-    public DeterministicKey freshFusionKey(KeyChain.KeyPurpose purpose) {
-        return freshFusionKeys(purpose, 1).get(0);
-    }
-
     /**
      * Returns a key/s that have not been returned by this method before (fresh). You can think of this as being
      * newly created key/s, although the notion of "create" is not really valid for a
@@ -396,16 +392,7 @@ public class KeyChainGroup implements KeyBag {
      * to get a proper P2SH address</p>
      */
     public List<DeterministicKey> freshKeys(KeyChain.KeyPurpose purpose, int numberOfKeys) {
-        DeterministicKeyChain chain = getActiveKeyChain();
-        if (chain.isMarried()) {
-            throw new UnsupportedOperationException("Key is not suitable to receive coins for married keychains." +
-                    " Use freshAddress to get P2SH address instead");
-        }
-        return chain.getKeys(purpose, numberOfKeys);   // Always returns the next key along the key chain.
-    }
-
-    public List<DeterministicKey> freshFusionKeys(KeyChain.KeyPurpose purpose, int numberOfKeys) {
-        DeterministicKeyChain chain = getFusionChain();
+        DeterministicKeyChain chain = getKeyChainForPurpose(purpose);
         if (chain.isMarried()) {
             throw new UnsupportedOperationException("Key is not suitable to receive coins for married keychains." +
                     " Use freshAddress to get P2SH address instead");
@@ -417,7 +404,7 @@ public class KeyChainGroup implements KeyBag {
      * Returns address for a {@link #freshKey(KeyChain.KeyPurpose)}
      */
     public Address freshAddress(KeyChain.KeyPurpose purpose) {
-        DeterministicKeyChain chain = getActiveKeyChain();
+        DeterministicKeyChain chain = getKeyChainForPurpose(purpose);
         if (chain.isMarried()) {
             Script outputScript = chain.freshOutputScript(purpose);
             checkState(ScriptPattern.isP2SH(outputScript)); // Only handle P2SH for now
@@ -428,10 +415,6 @@ public class KeyChainGroup implements KeyBag {
         } else {
             return freshKey(purpose).toAddress(params);
         }
-    }
-
-    public Address freshFusionAddress(KeyChain.KeyPurpose purpose) {
-        return freshFusionKey(purpose).toAddress(params);
     }
 
     /**
@@ -1223,5 +1206,9 @@ public class KeyChainGroup implements KeyBag {
         for (DeterministicKeyChain chain : chains)
             epoch += chain.getKeyLookaheadEpoch();
         return epoch;
+    }
+
+    public DeterministicKeyChain getKeyChainForPurpose(KeyChain.KeyPurpose purpose) {
+        return purpose == KeyChain.KeyPurpose.FUSION ? getFusionChain() : getActiveKeyChain();
     }
 }

@@ -44,7 +44,8 @@ public interface KeyChain {
         RECEIVE_FUNDS,
         CHANGE,
         REFUND,
-        AUTHENTICATION
+        AUTHENTICATION,
+        FUSION
     }
 
     /**

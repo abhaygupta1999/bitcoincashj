@@ -597,6 +597,10 @@ public class Wallet extends BaseTaggableObject
         return currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
     }
 
+    public Address currentFusionAddress() {
+        return currentAddress(KeyChain.KeyPurpose.FUSION);
+    }
+
     public Address getMemoAccountAddress() {
         return getIssuedReceiveAddresses().get(MEMO_ACCOUNT_ADDRESS_INDEX);
     }
@@ -658,18 +662,6 @@ public class Wallet extends BaseTaggableObject
         return key;
     }
 
-    public Address freshFusionAddress(KeyChain.KeyPurpose purpose) {
-        Address key;
-        keyChainGroupLock.lock();
-        try {
-            key = keyChainGroup.freshFusionAddress(purpose);
-        } finally {
-            keyChainGroupLock.unlock();
-        }
-        saveNow();
-        return key;
-    }
-
     /**
      * An alias for calling {@link #freshAddress(org.bitcoinj.wallet.KeyChain.KeyPurpose)} with
      * {@link org.bitcoinj.wallet.KeyChain.KeyPurpose#RECEIVE_FUNDS} as the parameter.
@@ -679,7 +671,7 @@ public class Wallet extends BaseTaggableObject
     }
 
     public Address freshFusionAddress() {
-        return freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
+        return freshAddress(KeyChain.KeyPurpose.FUSION);
     }
 
     /**
