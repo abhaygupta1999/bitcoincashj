@@ -417,11 +417,7 @@ public class WalletProtobufSerializer {
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
     public Wallet readWallet(InputStream input, @Nullable WalletExtension... walletExtensions) throws UnreadableWalletException {
-        return readWallet(input, DeterministicKeyChain.BIP44_ACCOUNT_ZERO_PATH, walletExtensions);
-    }
-
-    public Wallet readWallet(InputStream input, HDPath accountPath, @Nullable WalletExtension... walletExtensions) throws UnreadableWalletException {
-        return readWallet(input, accountPath, false, walletExtensions);
+        return readWallet(input, false, walletExtensions);
     }
 
     /**
@@ -440,14 +436,14 @@ public class WalletProtobufSerializer {
      *
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
-    public Wallet readWallet(InputStream input, HDPath accountPath, boolean forceReset, @Nullable WalletExtension[] extensions) throws UnreadableWalletException {
+    public Wallet readWallet(InputStream input, boolean forceReset, @Nullable WalletExtension[] extensions) throws UnreadableWalletException {
         try {
             Protos.Wallet walletProto = parseToProto(input);
             final String paramsID = walletProto.getNetworkIdentifier();
             NetworkParameters params = NetworkParameters.fromID(paramsID);
             if (params == null)
                 throw new UnreadableWalletException("Unknown network parameters ID " + paramsID);
-            return readWallet(params, accountPath, extensions, walletProto, forceReset);
+            return readWallet(params, extensions, walletProto, forceReset);
         } catch (IOException | IllegalArgumentException | IllegalStateException e) {
             throw new UnreadableWalletException("Could not parse input stream to protobuf", e);
         }
@@ -469,11 +465,6 @@ public class WalletProtobufSerializer {
         return readWallet(params, extensions, walletProto, false);
     }
 
-    public Wallet readWallet(NetworkParameters params, HDPath accountPath, @Nullable WalletExtension[] extensions,
-                             Protos.Wallet walletProto) throws UnreadableWalletException {
-        return readWallet(params, accountPath, extensions, walletProto, false);
-    }
-
     /**
      * <p>Loads wallet data from the given protocol buffer and inserts it into the given Wallet object. This is primarily
      * useful when you wish to pre-register extension objects. Note that if loading fails the provided Wallet object
@@ -492,11 +483,6 @@ public class WalletProtobufSerializer {
      */
     public Wallet readWallet(NetworkParameters params, @Nullable WalletExtension[] extensions,
                              Protos.Wallet walletProto, boolean forceReset) throws UnreadableWalletException {
-        return readWallet(params, DeterministicKeyChain.BIP44_ACCOUNT_ZERO_PATH, extensions, walletProto, forceReset);
-    }
-
-    public Wallet readWallet(NetworkParameters params, HDPath accountPath, @Nullable WalletExtension[] extensions,
-                             Protos.Wallet walletProto, boolean forceReset) throws UnreadableWalletException {
         if (walletProto.getVersion() > CURRENT_WALLET_VERSION)
             throw new UnreadableWalletException.FutureVersion();
         if (!walletProto.getNetworkIdentifier().equals(params.getId()))
@@ -507,9 +493,9 @@ public class WalletProtobufSerializer {
         if (walletProto.hasEncryptionParameters()) {
             Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
             final KeyCrypterScrypt keyCrypter = new KeyCrypterScrypt(encryptionParameters);
-            keyChainGroup = KeyChainGroup.fromProtobufEncrypted(params, accountPath, walletProto.getKeyList(), keyCrypter, keyChainFactory);
+            keyChainGroup = KeyChainGroup.fromProtobufEncrypted(params, walletProto.getKeyList(), keyCrypter, keyChainFactory);
         } else {
-            keyChainGroup = KeyChainGroup.fromProtobufUnencrypted(params, accountPath, walletProto.getKeyList(), keyChainFactory);
+            keyChainGroup = KeyChainGroup.fromProtobufUnencrypted(params, walletProto.getKeyList(), keyChainFactory);
         }
         Wallet wallet = factory.create(params, keyChainGroup);
 

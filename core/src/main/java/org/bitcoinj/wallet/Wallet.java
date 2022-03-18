@@ -1824,11 +1824,7 @@ public class Wallet extends BaseTaggableObject
      * Returns a wallet deserialized from the given input stream and wallet extensions.
      */
     public static Wallet loadFromFileStream(InputStream stream, @Nullable WalletExtension... walletExtensions) throws UnreadableWalletException {
-        return loadFromFileStream(stream, DeterministicKeyChain.BIP44_ACCOUNT_ZERO_PATH, walletExtensions);
-    }
-
-    public static Wallet loadFromFileStream(InputStream stream, HDPath accountPath, @Nullable WalletExtension... walletExtensions) throws UnreadableWalletException {
-        Wallet wallet = new WalletProtobufSerializer().readWallet(stream, accountPath, walletExtensions);
+        Wallet wallet = new WalletProtobufSerializer().readWallet(stream, walletExtensions);
         if (!wallet.isConsistent()) {
             log.error("Loaded an inconsistent wallet");
         }
