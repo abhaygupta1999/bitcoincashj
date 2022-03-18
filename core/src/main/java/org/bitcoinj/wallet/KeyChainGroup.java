@@ -117,7 +117,12 @@ public class KeyChainGroup implements KeyBag {
                 DeterministicKeyChain chain = DeterministicKeyChain.builder().seed(seed)
                         .outputScriptType(Script.ScriptType.P2PKH)
                         .accountPath(structure.accountPathFor(Script.ScriptType.P2PKH)).build();
+
+                DeterministicKeyChain fusionChain = DeterministicKeyChain.builder().seed(seed)
+                        .outputScriptType(Script.ScriptType.P2PKH)
+                        .accountPath(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH).build();
                 this.chains.clear();
+                this.chains.add(fusionChain);
                 this.chains.add(chain);
             } else {
                 throw new IllegalArgumentException(outputScriptType.toString());
@@ -140,7 +145,12 @@ public class KeyChainGroup implements KeyBag {
                 DeterministicKeyChain chain = DeterministicKeyChain.builder().spend(accountKey)
                         .outputScriptType(Script.ScriptType.P2PKH)
                         .accountPath(structure.accountPathFor(Script.ScriptType.P2PKH)).build();
+
+                DeterministicKeyChain fusionChain = DeterministicKeyChain.builder().spend(accountKey)
+                        .outputScriptType(Script.ScriptType.P2PKH)
+                        .accountPath(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH).build();
                 this.chains.clear();
+                this.chains.add(fusionChain);
                 this.chains.add(chain);
             } else {
                 throw new IllegalArgumentException(outputScriptType.toString());
@@ -442,7 +452,35 @@ public class KeyChainGroup implements KeyBag {
         checkState(isSupportsDeterministicChains(), "doesn't support deterministic chains");
         if (chains.isEmpty())
             throw new DeterministicUpgradeRequiredException();
-        return chains.get(chains.size() - 1);
+
+        return getNormalChain();
+    }
+
+    /**
+    Gets first (latest) non-Fusion output chain.
+     */
+    public final DeterministicKeyChain getNormalChain() {
+        DeterministicKeyChain normalChain = null;
+        for(int i = chains.size()-1; i >= 0; i--) {
+            DeterministicKeyChain chain = chains.get(i);
+            if(!chain.getAccountPath().equals(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH)) {
+                normalChain = chain;
+                break;
+            }
+        }
+        return normalChain;
+    }
+
+    public final DeterministicKeyChain getFusionChain() {
+        DeterministicKeyChain fusionChain = null;
+        for(int i = chains.size()-1; i >= 0; i--) {
+            DeterministicKeyChain chain = chains.get(i);
+            if(chain.getAccountPath().equals(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH)) {
+                fusionChain = chain;
+                break;
+            }
+        }
+        return fusionChain;
     }
 
     /**
@@ -926,20 +964,31 @@ public class KeyChainGroup implements KeyBag {
     }
 
     public static KeyChainGroup fromProtobufUnencrypted(NetworkParameters params, List<Protos.Key> keys, KeyChainFactory factory) throws UnreadableWalletException {
-        return fromProtobufUnencrypted(params, DeterministicKeyChain.BIP44_ACCOUNT_ZERO_PATH, keys, factory);
-    }
-
-    public static KeyChainGroup fromProtobufUnencrypted(NetworkParameters params, HDPath accountPath, List<Protos.Key> keys, KeyChainFactory factory) throws UnreadableWalletException {
         BasicKeyChain basicKeyChain = BasicKeyChain.fromProtobufUnencrypted(keys);
-        List<DeterministicKeyChain> chains = DeterministicKeyChain.fromProtobuf(keys, accountPath, null, factory);
+        List<DeterministicKeyChain> chains = DeterministicKeyChain.fromProtobuf(keys, null, factory);
         int lookaheadSize = -1, lookaheadThreshold = -1;
         EnumMap<KeyChain.KeyPurpose, DeterministicKey> currentKeys = null;
+        DeterministicKeyChain normalChain = null;
+        boolean fusionChainExists = false;
+        for(DeterministicKeyChain chain : chains) {
+            if(chain.getAccountPath().equals(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH)) {
+                fusionChainExists = true;
+            } else {
+                normalChain = chain;
+            }
+        }
+
         if (!chains.isEmpty()) {
-            DeterministicKeyChain activeChain = chains.get(chains.size() - 1);
+            DeterministicKeyChain activeChain = normalChain;
             lookaheadSize = activeChain.getLookaheadSize();
             lookaheadThreshold = activeChain.getLookaheadThreshold();
-            currentKeys = createCurrentKeysMap(chains);
+            currentKeys = createCurrentKeysMap(normalChain, chains);
         }
+
+        if(!fusionChainExists && normalChain != null) {
+            throw new FusionUpgradeRequiredException();
+        }
+
         extractFollowingKeychains(chains);
         return new KeyChainGroup(params, basicKeyChain, chains, lookaheadSize, lookaheadThreshold, currentKeys, null);
     }
@@ -948,30 +997,52 @@ public class KeyChainGroup implements KeyBag {
         return fromProtobufUnencrypted(params, keys, new DefaultKeyChainFactory());
     }
 
-    public static KeyChainGroup fromProtobufEncrypted(NetworkParameters params, List<Protos.Key> keys, KeyCrypter crypter, KeyChainFactory factory) throws UnreadableWalletException {
-        return fromProtobufEncrypted(params, DeterministicKeyChain.BIP44_ACCOUNT_ZERO_PATH, keys, crypter, factory);
-    }
-
     public static KeyChainGroup fromProtobufEncrypted(NetworkParameters params, List<Protos.Key> keys, KeyCrypter crypter) throws UnreadableWalletException {
-        return fromProtobufEncrypted(params, DeterministicKeyChain.BIP44_ACCOUNT_ZERO_PATH, keys, crypter, new DefaultKeyChainFactory());
+        return fromProtobufEncrypted(params, keys, crypter, new DefaultKeyChainFactory());
     }
 
-    public static KeyChainGroup fromProtobufEncrypted(NetworkParameters params, HDPath accountPath, List<Protos.Key> keys, KeyCrypter crypter, KeyChainFactory factory) throws UnreadableWalletException {
+    public static KeyChainGroup fromProtobufEncrypted(NetworkParameters params, List<Protos.Key> keys, KeyCrypter crypter, KeyChainFactory factory) throws UnreadableWalletException {
         checkNotNull(crypter);
         BasicKeyChain basicKeyChain = BasicKeyChain.fromProtobufEncrypted(keys, crypter);
-        List<DeterministicKeyChain> chains = DeterministicKeyChain.fromProtobuf(keys, accountPath, crypter, factory);
+        List<DeterministicKeyChain> chains = DeterministicKeyChain.fromProtobuf(keys, crypter, factory);
         int lookaheadSize = -1, lookaheadThreshold = -1;
         EnumMap<KeyChain.KeyPurpose, DeterministicKey> currentKeys = null;
+        DeterministicKeyChain normalChain = null;
+        boolean fusionChainExists = false;
+        for(DeterministicKeyChain chain : chains) {
+            if(chain.getAccountPath().equals(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH)) {
+                fusionChainExists = true;
+            } else {
+                normalChain = chain;
+            }
+        }
+
         if (!chains.isEmpty()) {
-            DeterministicKeyChain activeChain = chains.get(chains.size() - 1);
+            DeterministicKeyChain activeChain = normalChain;
             lookaheadSize = activeChain.getLookaheadSize();
             lookaheadThreshold = activeChain.getLookaheadThreshold();
-            currentKeys = createCurrentKeysMap(chains);
+            currentKeys = createCurrentKeysMap(normalChain, chains);
         }
+
+        if(!fusionChainExists && normalChain != null) {
+            throw new FusionUpgradeRequiredException();
+        }
+
         extractFollowingKeychains(chains);
         return new KeyChainGroup(params, basicKeyChain, chains, lookaheadSize, lookaheadThreshold, currentKeys, crypter);
     }
 
+    public void upgradeToFusion(DeterministicKeyChain normalChain, Script.ScriptType preferredScriptType, KeyChainGroupStructure structure,
+                                long keyRotationTimeSecs, @Nullable KeyParameter aesKey) {
+        DeterministicSeed seed = normalChain.getSeed();
+        if(seed.isEncrypted()) {
+            seed = seed.decrypt(getKeyCrypter(), "", aesKey);
+        }
+        DeterministicKeyChain fusionChain = DeterministicKeyChain.builder().seed(seed)
+                .outputScriptType(Script.ScriptType.P2PKH)
+                .accountPath(DeterministicKeyChain.BIP44_ACCOUNT_2016_PATH).build();
+        chains.add(fusionChain);
+    }
     /**
      * <p>This method will upgrade the wallet along the following path: {@code Basic --> P2PKH --> P2WPKH}</p>
      * <p>It won't skip any steps in that upgrade path because the user might be restoring from a backup and
@@ -1066,9 +1137,7 @@ public class KeyChainGroup implements KeyBag {
         return getActiveKeyChain(preferredScriptType, keyRotationTimeSecs) == null;
     }
 
-    private static EnumMap<KeyChain.KeyPurpose, DeterministicKey> createCurrentKeysMap(List<DeterministicKeyChain> chains) {
-        DeterministicKeyChain activeChain = chains.get(chains.size() - 1);
-
+    private static EnumMap<KeyChain.KeyPurpose, DeterministicKey> createCurrentKeysMap(DeterministicKeyChain activeChain, List<DeterministicKeyChain> chains) {
         EnumMap<KeyChain.KeyPurpose, DeterministicKey> currentKeys = new EnumMap<>(KeyChain.KeyPurpose.class);
 
         // assuming that only RECEIVE and CHANGE keys are being used at the moment, we will treat latest issued external key

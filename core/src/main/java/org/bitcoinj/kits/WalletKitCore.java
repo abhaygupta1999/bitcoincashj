@@ -528,7 +528,7 @@ public class WalletKitCore extends AbstractIdleService {
                 serializer = new WalletProtobufSerializer(walletFactory);
             else
                 serializer = new WalletProtobufSerializer();
-            wallet = serializer.readWallet(params, this.structure.accountPathFor(this.preferredOutputScriptType), extArray, proto);
+            wallet = serializer.readWallet(params, extArray, proto);
             if (shouldReplayWallet)
                 wallet.reset();
         } finally {
@@ -542,7 +542,7 @@ public class WalletKitCore extends AbstractIdleService {
         if (restoreFromSeed != null)
             kcg.fromSeed(restoreFromSeed, preferredOutputScriptType);
         else if (restoreFromKey != null)
-            kcg.addChain(DeterministicKeyChain.builder().spend(restoreFromKey).outputScriptType(preferredOutputScriptType).build());
+            kcg.fromKey(restoreFromKey, preferredOutputScriptType);
         else
             kcg.fromRandom(preferredOutputScriptType);
         if (walletFactory != null) {

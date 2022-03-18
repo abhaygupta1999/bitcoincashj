@@ -161,13 +161,13 @@ public class BIP47AppKit extends WalletKitCore {
             @Override
             public void run() {
                 ArrayList<String> txids = new ArrayList<String>();
-                String apiUrl = "https://rest.bitcoin.com/v2/address/utxo/" + cashAddr;
+                String apiUrl = "https://insomnia.fountainhead.cash/v1/address/utxos/" + cashAddr;
                 JSONObject utxosJson = getJSONObject(apiUrl);
                 try {
                     JSONArray utxos = utxosJson.getJSONArray("utxos");
                     for (int x = 0; x < utxos.length(); x++) {
                         JSONObject utxo = utxos.getJSONObject(x);
-                        String txid = utxo.getString("txid");
+                        String txid = utxo.getString("tx_hash");
                         txids.add(txid);
                     }
 
@@ -182,12 +182,12 @@ public class BIP47AppKit extends WalletKitCore {
     }
 
     private void grabTransactionAndProcessNotificationTransaction(String txid) {
-        String url = "https://rest.bitcoin.com/v2/rawtransactions/getRawTransaction/" + txid + "?verbose=true";
+        String url = "https://insomnia.fountainhead.cash/v1/tx/data/" + txid + "?verbose=false";
 
         JSONObject txJson = getJSONObject(url);
         if (txJson != null) {
             try {
-                String txHexVariable = "hex";
+                String txHexVariable = "tx";
                 String txHex = txJson.getString(txHexVariable);
                 Transaction tx = new Transaction(this.params, Hex.decode(txHex));
                 if (isNotificationTransaction(tx)) {
