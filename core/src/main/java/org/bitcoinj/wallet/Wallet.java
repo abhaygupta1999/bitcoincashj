@@ -4376,7 +4376,7 @@ public class Wallet extends BaseTaggableObject
             // we don't have the keys for.
             List<TransactionOutput> candidates;
             if (req.utxos == null || req.utxos.size() == 0) {
-                candidates = calculateAllSpendCandidates(true, req.missingSigsMode == MissingSigsMode.THROW);
+                candidates = req.spendOnlyFusion ? calculateAllFusionCandidates(true, req.missingSigsMode == MissingSigsMode.THROW, false) : calculateAllSpendCandidates(true, req.missingSigsMode == MissingSigsMode.THROW);
             } else {
                 candidates = req.utxos;
             }
@@ -4543,7 +4543,7 @@ public class Wallet extends BaseTaggableObject
         try {
             List<TransactionOutput> candidates;
             if (vUTXOProvider == null) {
-                candidates = new ArrayList<TransactionOutput>(myUnspents.size());
+                candidates = new ArrayList<TransactionOutput>();
                 for (TransactionOutput output : myUnspents) {
                     if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
                     Transaction transaction = checkNotNull(output.getParentTransaction());
@@ -4574,7 +4574,7 @@ public class Wallet extends BaseTaggableObject
         try {
             List<TransactionOutput> candidates;
             if (vUTXOProvider == null) {
-                candidates = new ArrayList<TransactionOutput>(myUnspents.size());
+                candidates = new ArrayList<TransactionOutput>();
                 for (TransactionOutput output : myUnspents) {
                     if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
                     Transaction transaction = checkNotNull(output.getParentTransaction());
@@ -4604,20 +4604,13 @@ public class Wallet extends BaseTaggableObject
     }
 
     public List<TransactionOutput> getAllDustUtxos(boolean excludeImmatureCoinbases, boolean excludeUnsignable) {
+        List<TransactionOutput> allUtxos = this.calculateAllSpendCandidates(excludeImmatureCoinbases, excludeUnsignable, true);
         lock.lock();
         try {
             List<TransactionOutput> candidates;
             if (vUTXOProvider == null) {
-                candidates = new ArrayList<TransactionOutput>(myUnspents.size());
-                for (TransactionOutput output : myUnspents) {
-                    if (excludeUnsignable && !canSignFor(output.getScriptPubKey())) continue;
-                    Transaction transaction = checkNotNull(output.getParentTransaction());
-                    if (excludeImmatureCoinbases && !transaction.isMature())
-                        continue;
-
-                    if(output.isFrozen())
-                        continue;
-
+                candidates = new ArrayList<TransactionOutput>();
+                for (TransactionOutput output : allUtxos) {
                     if (output.getValue().value == 546L) {
                         candidates.add(output);
                     }

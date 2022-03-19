@@ -89,6 +89,8 @@ public class SendRequest {
     public List<TransactionOutput> utxos = null;
     public int emptyWalletOutput = 0;
 
+    public boolean spendOnlyFusion = false;
+
     /**
      * "Change" means the difference between the value gathered by a transactions inputs (the size of which you
      * don't really control as it depends on who sent you money), and the value being sent somewhere else. The
