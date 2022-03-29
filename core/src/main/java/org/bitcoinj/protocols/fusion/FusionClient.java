@@ -26,11 +26,23 @@ import java.security.SecureRandom;
 import java.util.*;
 
 public class FusionClient {
+    private final double COVERT_CONNECT_TIMEOUT = 15.0;
+    private final double COVERT_CONNECT_WINDOW = 15.0;
+    private final double COVERT_SUBMIT_TIMEOUT = 3.0;
+    private final double COVERT_SUBMIT_WINDOW = 5.0;
+    private final double MAX_CLOCK_DISCREPANCY = 5.0;
+    private final double WARMUP_TIME = 30.0;
+    private final double WARMUP_SLOP = 3.0;
+    private final double TS_EXPECTING_COMMITMENTS = +3.0;
+    private final double T_START_COMPS = +5.0;
+    private final double T_END_COMPS = +10.0;
+    private final double TS_EXPECTING_COVERT_COMPONENTS = +15.0;
+    private final double T_START_SIGS = +20.0;
+    private final double TS_EXPECTING_COVERT_SIGNATURES = +30.0;
+    private final double T_EXPECTING_CONCLUSION = +35.0;
+
     private final int STANDARD_TIMEOUT = 3;
-    private final int WARMUP_TIME = 30;
-    private final int WARMUP_SLOP = 3;
     private final long MIN_OUTPUT = 10000;
-    private final long MAX_CLOCK_DISCREPANCY = 5;
     private final long MAX_EXCESS_FEE = 10000;
     private final long MAX_COMPONENTS = 40;
     private final long MIN_TX_COMPONENTS = 11;
@@ -651,7 +663,7 @@ public class FusionClient {
             this.listener.onFusionStatus(FusionStatus.SUBMITTING_COMMITMENTS);
             this.sendMessage(clientMessage);
 
-            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(5);
+            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(T_START_COMPS);
             if(blindSigServerMessage == null) {
                 System.out.println("blindSigServerMessage1 is null");
                 return FusionStatus.FAILED;
@@ -680,7 +692,7 @@ public class FusionClient {
                     }
                 }
 
-                double remTime = 5d - covertClock();
+                double remTime = T_START_COMPS - covertClock();
                 if(remTime < 0) {
                     System.out.println("Arrived at covert-component phase too slowly.");
                 }
@@ -708,10 +720,10 @@ public class FusionClient {
                 }
 
                 listener.onFusionStatus(FusionStatus.COVERTLY_SENDING_COMPONENTS);
-                covertSubmitter.scheduleSubmissions(covertMessages, covertT0 + 5, covertT0 + 15);
+                covertSubmitter.scheduleSubmissions(covertMessages, covertT0 + T_START_COMPS, covertT0 + T_END_COMPS);
 
                 listener.onFusionStatus(FusionStatus.RECEIVING_ALL_COMMITMENTS);
-                Fusion.ServerMessage allCommitmentsServerMsg = this.receiveMessage(+20);
+                Fusion.ServerMessage allCommitmentsServerMsg = this.receiveMessage(T_START_SIGS);
                 if(allCommitmentsServerMsg.hasAllcommitments()) {
                     System.out.println("Has all commitments msg");
                     Fusion.AllCommitments allCommitmentsMsg = allCommitmentsServerMsg.getAllcommitments();
