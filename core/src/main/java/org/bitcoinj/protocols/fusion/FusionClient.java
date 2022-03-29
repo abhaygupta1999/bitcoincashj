@@ -38,6 +38,7 @@ public class FusionClient {
     private final double T_END_COMPS = +10.0;
     private final double TS_EXPECTING_COVERT_COMPONENTS = +15.0;
     private final double T_START_SIGS = +20.0;
+    private final double T_END_SIGS = +25.0;
     private final double TS_EXPECTING_COVERT_SIGNATURES = +30.0;
     private final double T_EXPECTING_CONCLUSION = +35.0;
 
@@ -743,14 +744,14 @@ public class FusionClient {
                     }
 
                     listener.onFusionStatus(FusionStatus.RECEIVING_ALL_COMPONENTS);
-                    Fusion.ServerMessage shareCovertComponentsServerMsg = this.receiveMessage(+20);
+                    Fusion.ServerMessage shareCovertComponentsServerMsg = this.receiveMessage(T_START_SIGS);
                     if(shareCovertComponentsServerMsg.hasSharecovertcomponents()) {
                         Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
                         String msgSessionHash = Hex.toHexString(shareCovertComponentsMsg.getSessionHash().toByteArray());
                         List<ByteString> allComponents = shareCovertComponentsMsg.getComponentsList();
                         boolean skipSignatures = shareCovertComponentsMsg.getSkipSignatures();
 
-                        if(covertClock() > 20) {
+                        if(covertClock() > T_START_SIGS) {
                             System.out.println("Shared components message arrived too slowly.");
                             return FusionStatus.FAILED;
                         }
@@ -826,8 +827,8 @@ public class FusionClient {
 
                             System.out.println("Scheduling signature submission");
                             listener.onFusionStatus(FusionStatus.COVERTLY_SENDING_SIGNATURES);
-                            covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + 20, covertT0 + 30);
-                            Fusion.ServerMessage resultServerMessage = this.receiveMessage(20);
+                            covertSubmitter.scheduleSubmissions(covertSignatureMessages, covertT0 + T_START_SIGS, covertT0 + T_END_SIGS);
+                            Fusion.ServerMessage resultServerMessage = this.receiveMessage(T_EXPECTING_CONCLUSION - TS_EXPECTING_COVERT_COMPONENTS);
                             if(resultServerMessage != null) {
                                 Fusion.FusionResult result = resultServerMessage.getFusionresult();
                                 if(result.getOk()) {
