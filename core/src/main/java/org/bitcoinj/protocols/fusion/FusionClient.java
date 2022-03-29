@@ -509,12 +509,15 @@ public class FusionClient {
         covertSubmitter.scheduleConnections();
 
         double tend = tFusionBegin + (WARMUP_TIME - WARMUP_SLOP - 1);
-        double remTime = tend-(System.currentTimeMillis()/1000D);
-        try {
-            System.out.println("Sleeping for " + remTime + "s");
-            Thread.sleep((int)remTime*1000L);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        while((System.currentTimeMillis()/1000D) < tend) {
+            try {
+                int connections = covertSubmitter.getConnections().size();
+                int spares = covertSubmitter.getSpareConnections().size();
+                System.out.println("Setting up Tor connections... " + connections + "+" + spares);
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
         return covertSubmitter;
@@ -648,7 +651,7 @@ public class FusionClient {
             this.listener.onFusionStatus(FusionStatus.SUBMITTING_COMMITMENTS);
             this.sendMessage(clientMessage);
 
-            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(covertT0 + 5);
+            Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(5);
             if(blindSigServerMessage == null) {
                 System.out.println("blindSigServerMessage1 is null");
                 return FusionStatus.FAILED;

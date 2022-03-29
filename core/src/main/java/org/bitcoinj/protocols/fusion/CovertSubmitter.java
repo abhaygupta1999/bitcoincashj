@@ -24,6 +24,14 @@ public class CovertSubmitter {
         }
     }
 
+    public ArrayList<CovertClient> getConnections() {
+        return connections;
+    }
+
+    public ArrayList<CovertClient> getSpareConnections() {
+        return spareConnections;
+    }
+
     public void scheduleConnections() {
         new Thread() {
             @Override
@@ -33,7 +41,7 @@ public class CovertSubmitter {
                 for(CovertClient client : connectionsCopy) {
                     client.runConnection();
                     try {
-                        Thread.sleep(500L);
+                        Thread.sleep(new Random().nextInt(5) * 100L);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
