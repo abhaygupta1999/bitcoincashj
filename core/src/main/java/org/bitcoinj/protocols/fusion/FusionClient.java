@@ -66,8 +66,10 @@ public class FusionClient {
     private double covertT0 = 0;
 
     private FusionListener listener;
+    private boolean fusionRunning = false;
 
     public FusionClient(String host, int port, ArrayList<TransactionOutput> coins, Wallet wallet, FusionListener listener) throws Exception {
+        fusionRunning = false;
         SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
         SSLSocket socket = (SSLSocket)factory.createSocket(host, port);
         socket.setTcpNoDelay(true);
@@ -93,6 +95,7 @@ public class FusionClient {
 
     public FusionClient updateUtxos(ArrayList<TransactionOutput> coins) throws Exception {
         System.out.println("Updating utxos...");
+        fusionRunning = false;
         this.out.close();
         this.in.close();
         this.socket.close();
@@ -205,12 +208,17 @@ public class FusionClient {
     }
 
     public void stopConnection() throws IOException {
-        in.close();
-        out.close();
-        socket.close();
-        in = null;
-        out = null;
-        socket = null;
+        fusionRunning = false;
+        try {
+            in.close();
+            out.close();
+            socket.close();
+            in = null;
+            out = null;
+            socket = null;
+        } catch(Exception e) {
+            // fail silently
+        }
     }
 
     public void greet() throws Exception {
@@ -401,6 +409,7 @@ public class FusionClient {
     }
 
     public void registerAndWait() {
+        fusionRunning = true;
         Fusion.JoinPools joinPools = Fusion.JoinPools.newBuilder()
                 .addAllTiers(this.tierOutputs.keySet())
                 .build();
@@ -418,7 +427,7 @@ public class FusionClient {
             @Override
             public void run() {
                 Fusion.ServerMessage serverMessage = null;
-                while(true) {
+                while(fusionRunning) {
                     try {
                         serverMessage = receiveMessage(10);
                         if (serverMessage != null) {
@@ -457,7 +466,7 @@ public class FusionClient {
                     CovertSubmitter covertSubmitter = startCovert(serverMessage);
                     safetyExcessFee = safetyExcessFees.get(serverMessage.getFusionbegin().getTier());
 
-                    while (true) {
+                    while (fusionRunning) {
                         try {
                             FusionStatus status = runRound(covertSubmitter);
                             listener.onFusionStatus(status);
