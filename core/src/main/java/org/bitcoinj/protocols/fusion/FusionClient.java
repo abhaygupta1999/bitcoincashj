@@ -35,10 +35,10 @@ public class FusionClient {
     private final double WARMUP_SLOP = 3.0;
     private final double TS_EXPECTING_COMMITMENTS = +3.0;
     private final double T_START_COMPS = +5.0;
-    private final double T_END_COMPS = +10.0;
+    private final double T_END_COMPS = +15;
     private final double TS_EXPECTING_COVERT_COMPONENTS = +15.0;
     private final double T_START_SIGS = +20.0;
-    private final double T_END_SIGS = +25.0;
+    private final double T_END_SIGS = +30.0;
     private final double TS_EXPECTING_COVERT_SIGNATURES = +30.0;
     private final double T_EXPECTING_CONCLUSION = +35.0;
 
@@ -657,15 +657,7 @@ public class FusionClient {
             }
 
             this.listener.onFusionStatus(FusionStatus.SUBMITTING_COMMITMENTS);
-
-            long currentTime = System.currentTimeMillis()/1000L;
-            long expectedTime = roundTime + 3;
-            System.out.println("time:: " + (expectedTime-currentTime));
-            if(currentTime >= expectedTime) {
-                System.out.println("we are too late");
-            }
             this.sendMessage(clientMessage);
-
             Fusion.ServerMessage blindSigServerMessage = this.receiveMessage(15);
             if(blindSigServerMessage == null) {
                 System.out.println("blindSigServerMessage1 is null");
@@ -694,13 +686,6 @@ public class FusionClient {
                         blindSigs.add(sig);
                     }
                 }
-
-                double remTime = T_START_COMPS - covertClock();
-                if(remTime < 0) {
-                    System.out.println("Arrived at covert-component phase too slowly.");
-                }
-                System.out.println("Remtime: " + remTime);
-                Thread.sleep((int)(remTime*1000D));
 
                 if(myComponents.size() != blindSigs.size()) {
                     System.out.println("My components size != blind Sigs size!");
