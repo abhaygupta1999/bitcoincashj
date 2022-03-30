@@ -1034,8 +1034,7 @@ public class KeyChainGroup implements KeyBag {
         return new KeyChainGroup(params, basicKeyChain, chains, lookaheadSize, lookaheadThreshold, currentKeys, crypter);
     }
 
-    public void upgradeToFusion(DeterministicKeyChain normalChain, Script.ScriptType preferredScriptType, KeyChainGroupStructure structure,
-                                long keyRotationTimeSecs, @Nullable KeyParameter aesKey) {
+    public void upgradeToFusion(DeterministicKeyChain normalChain, Script.ScriptType preferredScriptType, @Nullable KeyParameter aesKey) {
         DeterministicSeed seed = normalChain.getSeed();
         if(seed.isEncrypted()) {
             seed = seed.decrypt(getKeyCrypter(), "", aesKey);

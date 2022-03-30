@@ -749,6 +749,15 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
+    public void upgradeToFusion(Script.ScriptType outputScriptType, @Nullable KeyParameter aesKey) throws DeterministicUpgradeRequiresPassword {
+        keyChainGroupLock.lock();
+        try {
+            keyChainGroup.upgradeToFusion(getActiveKeyChain(), outputScriptType, aesKey);
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
     /**
      * @deprecated Use {@link #isDeterministicUpgradeRequired(ScriptType)}
      */

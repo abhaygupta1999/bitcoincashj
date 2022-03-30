@@ -667,13 +667,13 @@ public class KeyChainGroupTest {
         DeterministicKey rkey1 = group.freshKey(KeyPurpose.RECEIVE_FUNDS);
         assertNotNull(seed1);
 
-        group.upgradeToFusion(group.getActiveKeyChain(), ScriptType.P2PKH, KeyChainGroupStructure.DEFAULT, 0, null);
+        group.upgradeToFusion(group.getActiveKeyChain(), ScriptType.P2PKH, null);
         assertFalse(group.isEncrypted());
         assertFalse(group.isFusionUpgradeRequired());
         DeterministicKey fkey1 = group.freshKey(KeyChain.KeyPurpose.FUSION);
 
         group = KeyChainGroup.fromProtobufUnencrypted(MAINNET, protobufs);
-        group.upgradeToFusion(group.getActiveKeyChain(), ScriptType.P2PKH, KeyChainGroupStructure.DEFAULT, 0, null);  // Should give same result as last time.
+        group.upgradeToFusion(group.getActiveKeyChain(), ScriptType.P2PKH, null);  // Should give same result as last time.
         assertFalse(group.isEncrypted());
         assertFalse(group.isFusionUpgradeRequired());
         DeterministicKey rkey2 = group.freshKey(KeyPurpose.RECEIVE_FUNDS);
