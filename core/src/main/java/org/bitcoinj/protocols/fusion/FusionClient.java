@@ -142,8 +142,6 @@ public class FusionClient {
         bos.write(clientMessage.toByteArray());
         out.write(bos.toByteArray());
         out.flush();
-
-        System.out.println("sent: " + Hex.toHexString(bos.toByteArray()));
     }
 
     public Fusion.ServerMessage receiveMessage(double timeout) throws Exception {
@@ -749,6 +747,7 @@ public class FusionClient {
                         Fusion.ShareCovertComponents shareCovertComponentsMsg = shareCovertComponentsServerMsg.getSharecovertcomponents();
                         String msgSessionHash = Hex.toHexString(shareCovertComponentsMsg.getSessionHash().toByteArray());
                         List<ByteString> allComponents = shareCovertComponentsMsg.getComponentsList();
+                        System.out.println("components size: " + allComponents.size());
                         boolean skipSignatures = shareCovertComponentsMsg.getSkipSignatures();
 
                         if(covertClock() > T_START_SIGS) {
@@ -790,13 +789,11 @@ public class FusionClient {
                             for(TransactionInput input : tx.getInputs()) {
                                 TransactionOutput output = input.findConnectedOutput(wallet);
                                 if(output == null) {
-                                    System.out.println("OUTPUT IS NULL!");
                                     continue;
                                 }
 
                                 Address address = output.getAddressFromP2PKHScript(wallet.getParams());
                                 if(address == null) {
-                                    System.out.println("ADDRESS IS NULL!");
                                     continue;
                                 }
 

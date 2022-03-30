@@ -77,7 +77,7 @@ public class CovertSubmitter {
                             }
                             if (!covertClient.done && covertClient.msg != null) {
                                 covertClient.submit(covertClient.msg);
-                                double remTime = (startTime+15)-(System.currentTimeMillis()/1000D);
+                                double remTime = (endTime)-(System.currentTimeMillis()/1000D);
                                 if(remTime < 0) {
                                     System.out.println("too slow for covert submission");
                                     break;

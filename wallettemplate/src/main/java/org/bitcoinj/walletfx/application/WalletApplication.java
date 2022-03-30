@@ -157,7 +157,7 @@ public abstract class WalletApplication implements AppDelegate {
     public void setupWalletKit(@Nullable DeterministicSeed seed) {
         // If seed is non-null it means we are restoring from backup.
         File appDataDirectory = AppDataDirectory.get(applicationName).toFile();
-        walletAppKit = new WalletAppKit(params, preferredOutputScriptType, KeyChainGroupStructure.SLP, appDataDirectory, walletFileName) {
+        walletAppKit = new WalletAppKit(params, preferredOutputScriptType, KeyChainGroupStructure.DEFAULT, appDataDirectory, walletFileName) {
             @Override
             protected void onSetupCompleted() {
                 wallet().setAcceptRiskyTransactions(true);
@@ -184,6 +184,7 @@ public abstract class WalletApplication implements AppDelegate {
                         FusionClient fusionClient; //cashfusion.electroncash.dk
                         try {
                             ArrayList<TransactionOutput> utxos = new ArrayList<>(wallet().getUtxos());
+                            System.out.println(utxos.size());
                             if(utxos.size() > 0) {
                                 fusionClient = new FusionClient("cashfusion.electroncash.dk", 8788, utxos, wallet(), listener);
                             }
