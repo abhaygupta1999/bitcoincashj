@@ -88,7 +88,6 @@ public class CovertClient {
     }
 
     public void submit(Fusion.CovertMessage covertMessage) {
-        System.out.println("Still connected?? " + this.socket.isConnected());
         byte[] magicBytes = Hex.decode("765be8b4e4396dcf");
 
         int size = covertMessage.toByteArray().length;

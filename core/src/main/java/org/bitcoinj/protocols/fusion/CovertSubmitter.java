@@ -69,7 +69,6 @@ public class CovertSubmitter {
                         for (CovertClient covertClient : connections) {
                             Fusion.CovertMessage cachedMsg = covertClient.msg;
                             while (covertClient.brokenPipe) {
-                                System.out.println("BROKEN PIPE");
                                 covertClient.restartConnection();
                                 int randSpare = new Random().nextInt(spareConnections.size());
                                 covertClient = spareConnections.get(randSpare);
@@ -79,20 +78,15 @@ public class CovertSubmitter {
                                 covertClient.submit(covertClient.msg);
                                 double remTime = (endTime)-(System.currentTimeMillis()/1000D);
                                 if(remTime < 0) {
-                                    System.out.println("too slow for covert submission");
                                     break;
                                 }
                                 Fusion.CovertResponse response = covertClient.receiveMessage(remTime);
                                 if (response != null) {
                                     if (response.hasOk()) {
-                                        System.out.println("response ok");
                                         covertClient.done = true;
                                         covertClient.msg = null;
-                                    } else {
-                                        System.out.println(response);
                                     }
                                 } else {
-                                    System.out.println("response NULL");
                                 }
                             }
                         }
