@@ -772,6 +772,15 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
+    public boolean isFusionUpgradeRequired(Script.ScriptType outputScriptType) {
+        keyChainGroupLock.lock();
+        try {
+            return keyChainGroup.isFusionUpgradeRequired();
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
     /**
      * Returns a snapshot of the watched scripts. This view is not live.
      */
