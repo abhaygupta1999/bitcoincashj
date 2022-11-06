@@ -1,3 +1,9 @@
+# WARNING
+This repository is no longer maintained. Please see the latest changes here:
+http://4hsesnr6mjb4qrflgf5gezjaszzoqnnisin7ywzbsv6pgcxysiaq.b32.i2p/pokkst/bitcoincashj
+
+To access, please install I2P: https://geti2p.net and configure your browser's proxy settings to use an HTTP proxy at 127.0.0.1:4444.
+
 This Java library for Bitcoin Cash is a fork of bitcoinj. Please read the feature list below for all the features I've implemented since becoming the maintainer.
 
 Please consider donating: bitcoincash:qptnypuugy29lttleggl7l0vpls0vg295q9nsavw6g
