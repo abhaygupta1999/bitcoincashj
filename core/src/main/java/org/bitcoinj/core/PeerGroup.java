@@ -94,7 +94,7 @@ public class PeerGroup implements TransactionBroadcaster {
      * get through.
      */
     private volatile int vMaxPeersToDiscoverCount = 100;
-    private static final long DEFAULT_PEER_DISCOVERY_TIMEOUT_MILLIS = 5000;
+    private static final long DEFAULT_PEER_DISCOVERY_TIMEOUT_MILLIS = 50000;
     private volatile long vPeerDiscoveryTimeoutMillis = DEFAULT_PEER_DISCOVERY_TIMEOUT_MILLIS;
 
     protected final NetworkParameters params;
@@ -178,7 +178,7 @@ public class PeerGroup implements TransactionBroadcaster {
     /**
      * How many milliseconds to wait after receiving a pong before sending another ping.
      */
-    public static final long DEFAULT_PING_INTERVAL_MSEC = 2000;
+    public static final long DEFAULT_PING_INTERVAL_MSEC = 20000;
     @GuardedBy("lock")
     private long pingIntervalMsec = DEFAULT_PING_INTERVAL_MSEC;
 
