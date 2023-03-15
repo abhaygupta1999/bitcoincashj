@@ -130,7 +130,8 @@ public class Peer extends PeerSocketHandler {
 
     private final HashSet<Sha256Hash> pendingDsProofDownloads = new HashSet<>();
 
-    private static final int PENDING_TX_DOWNLOADS_LIMIT = 1000;
+    private static final int PENDING_TX_DOWNLOADS_LIMIT = 10000;
+
     // The lowest version number we're willing to accept. Lower than this will result in an immediate disconnect.
     private volatile int vMinProtocolVersion;
 
@@ -474,6 +475,7 @@ public class Peer extends PeerSocketHandler {
         // If we are in the middle of receiving transactions as part of a filtered block push from the remote node,
         // and we receive something that's not a transaction, then we're done.
         if (currentFilteredBlock != null && !(m instanceof Transaction)) {
+            log.info("Peer.processMessage called with no transcation");
             endFilteredBlock(currentFilteredBlock);
             currentFilteredBlock = null;
         }
@@ -602,8 +604,8 @@ public class Peer extends PeerSocketHandler {
         // Now it's our turn ...
         // Send an ACK message stating we accept the peers protocol version.
         sendMessage(new VersionAck());
-        if (log.isDebugEnabled())
-            log.debug("{}: Incoming version handshake complete.", this);
+        //if (log.isDebugEnabled())
+            log.info("{}: Incoming version handshake complete.", this);
         incomingVersionHandshakeFuture.set(this);
     }
 
@@ -614,8 +616,8 @@ public class Peer extends PeerSocketHandler {
         if (outgoingVersionHandshakeFuture.isDone()) {
             throw new ProtocolException("got more than one version ack");
         }
-        if (log.isDebugEnabled())
-            log.debug("{}: Outgoing version handshake complete.", this);
+        //if (log.isDebugEnabled())
+            log.info("{}: Outgoing version handshake complete.", this);
         outgoingVersionHandshakeFuture.set(this);
     }
 
@@ -669,6 +671,7 @@ public class Peer extends PeerSocketHandler {
     }
 
     protected void processHeaders(HeadersMessage m) throws ProtocolException {
+        log.info("Peer.processHeaders called with message: {}", m);
         // Runs in network loop thread for this peer.
         //
         // This method can run if a peer just randomly sends us a "headers" message (should never happen), or more
@@ -777,8 +780,8 @@ public class Peer extends PeerSocketHandler {
         tx.verify();
         lock.lock();
         try {
-            if (log.isDebugEnabled())
-                log.debug("{}: Received tx {}", getAddress(), tx.getTxId());
+            //if (log.isDebugEnabled())
+                log.info("{}: Received tx {}", getAddress(), tx.getTxId());
             // Label the transaction as coming in from the P2P network (as opposed to being created by us, direct import,
             // etc). This helps the wallet decide how to risk analyze it later.
             //
@@ -987,19 +990,19 @@ public class Peer extends PeerSocketHandler {
     }
 
     protected void processBlock(Block m) {
-        if (log.isDebugEnabled())
-            log.debug("{}: Received broadcast block {}", getAddress(), m.getHashAsString());
+        //if (log.isDebugEnabled())
+            log.info("{}: Received broadcast block {}", getAddress(), m.getHashAsString());
         // Was this block requested by getBlock()?
         if (maybeHandleRequestedData(m)) return;
         if (blockChain == null) {
-            if (log.isDebugEnabled())
-                log.debug("Received block but was not configured with an AbstractBlockChain");
+            //if (log.isDebugEnabled())
+                log.info("Received block but was not configured with an AbstractBlockChain");
             return;
         }
         // Did we lose download peer status after requesting block data?
         if (!vDownloadData) {
-            if (log.isDebugEnabled())
-                log.debug("{}: Received block we did not ask for: {}", getAddress(), m.getHashAsString());
+            //if (log.isDebugEnabled())
+                log.info("{}: Received block we did not ask for: {}", getAddress(), m.getHashAsString());
             return;
         }
         pendingBlockDownloads.remove(m.getHash());
@@ -1041,7 +1044,7 @@ public class Peer extends PeerSocketHandler {
             }
         } catch (VerificationException e) {
             // We don't want verification failures to kill the thread.
-            log.warn("{}: Block verification failed", getAddress(), e);
+            log.info("{}: Block verification failed", getAddress(), e);
         } catch (PrunedException e) {
             // Unreachable when in SPV mode.
             throw new RuntimeException(e);
@@ -1050,11 +1053,11 @@ public class Peer extends PeerSocketHandler {
 
     // TODO: Fix this duplication.
     protected void endFilteredBlock(FilteredBlock m) {
-        if (log.isDebugEnabled())
-            log.debug("{}: Received broadcast filtered block {}", getAddress(), m.getHash().toString());
+        //if (log.isDebugEnabled())
+            log.info("{}: Received broadcast filtered block {}", getAddress(), m.getHash().toString());
         if (!vDownloadData) {
-            if (log.isDebugEnabled())
-                log.debug("{}: Received block we did not ask for: {}", getAddress(), m.getHash().toString());
+            //if (log.isDebugEnabled())
+                log.info("{}: Received block we did not ask for: {}", getAddress(), m.getHash().toString());
             return;
         }
         if (blockChain == null) {
@@ -1211,6 +1214,7 @@ public class Peer extends PeerSocketHandler {
         }
 
         final boolean downloadData = this.vDownloadData;
+        log.info("Peer.processInv with transactions: {}, blocks: {}, dsproofs: {}, downloadData: {}", transactions, blocks, dsproofs, downloadData);
 
         if (transactions.size() == 0 && blocks.size() == 1) {
             // Single block announcement. If we're downloading the chain this is just a tickle to make us continue
@@ -1254,8 +1258,8 @@ public class Peer extends PeerSocketHandler {
                 // We created this transaction ourselves, so don't download.
                 it.remove();
             } else {
-                if (log.isDebugEnabled())
-                    log.debug("{}: getdata on tx {}", getAddress(), item.hash);
+                //if (log.isDebugEnabled())
+                    log.info("{}: getdata on tx {}", getAddress(), item.hash);
                 getdata.addTransaction(item.hash);
                 if (pendingTxDownloads.size() > PENDING_TX_DOWNLOADS_LIMIT) {
                     log.info("{}: Too many pending transactions, disconnecting", this);
@@ -1489,8 +1493,8 @@ public class Peer extends PeerSocketHandler {
             log.info(Throwables.getStackTraceAsString(new Throwable()));
             return;
         }
-        if (log.isDebugEnabled())
-            log.debug("{}: blockChainDownloadLocked({}) current head = {}",
+        //if (log.isDebugEnabled())
+            log.info("{}: blockChainDownloadLocked({}) current head = {}",
                     this, toHash, chainHead.getHeader().getHashAsString());
         StoredBlock cursor = chainHead;
         for (int i = 100; cursor != null && i > 0; i--) {
@@ -1655,12 +1659,14 @@ public class Peer extends PeerSocketHandler {
     }
 
     private void processPing(Ping m) {
+        log.info("Peer.processPing called with nonce: {}", m.getNonce());
         if (m.hasNonce())
             sendMessage(new Pong(m.getNonce()));
     }
 
     protected void processPong(Pong m) {
         // Iterates over a snapshot of the list, so we can run unlocked here.
+        log.info("Peer.processPong called with nonce: {}, and pendingPings.size: {}", m.getNonce(), pendingPings.size());
         for (PendingPing ping : pendingPings) {
             if (m.getNonce() == ping.nonce) {
                 pendingPings.remove(ping);

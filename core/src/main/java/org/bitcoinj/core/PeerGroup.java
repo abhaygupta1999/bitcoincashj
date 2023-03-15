@@ -263,7 +263,7 @@ public class PeerGroup implements TransactionBroadcaster {
     }
 
     // Exponential backoff for peers starts at 1 second and maxes at 10 minutes.
-    private final ExponentialBackoff.Params peerBackoffParams = new ExponentialBackoff.Params(1000, 1.5f, 10 * 60 * 1000);
+    private final ExponentialBackoff.Params peerBackoffParams = new ExponentialBackoff.Params(1000, 1.5f, 2 * 60 * 1000);
     // Tracks failures globally in case of a network failure.
     @GuardedBy("lock")
     private ExponentialBackoff groupBackoff = new ExponentialBackoff(new ExponentialBackoff.Params(1000, 1.5f, 10 * 1000));
@@ -305,6 +305,7 @@ public class PeerGroup implements TransactionBroadcaster {
         @Override
         public void onPeerDisconnected(Peer peer, int peerCount) {
             // The channel will be automatically removed from channels.
+            log.info("Handling peer death of peer: {}", peer);
             handlePeerDeath(peer, null);
         }
     }
@@ -331,7 +332,8 @@ public class PeerGroup implements TransactionBroadcaster {
     /**
      * The default timeout between when a connection attempt begins and version message exchange completes
      */
-    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 300000;
+    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 30000;
+
     private volatile int vConnectTimeoutMillis = DEFAULT_CONNECT_TIMEOUT_MILLIS;
 
     /**
@@ -1514,7 +1516,7 @@ public class PeerGroup implements TransactionBroadcaster {
                 Uninterruptibles.getUninterruptibly(future);
         } catch (ExecutionException e) {
             Throwable cause = Throwables.getRootCause(e);
-            log.warn("Failed to connect to " + address + ": " + cause.getMessage());
+            log.info("Failed to connect to " + address + ": " + cause.getMessage());
             handlePeerDeath(peer, cause);
             return null;
         }
@@ -2018,6 +2020,7 @@ public class PeerGroup implements TransactionBroadcaster {
     void startBlockChainDownloadFromPeer(Peer peer) {
         lock.lock();
         try {
+            log.info("PeerGroup.startBlockChainDownloadFromPeer started");
             setDownloadPeer(peer);
 
             if (chainDownloadSpeedCalculator == null) {

@@ -77,6 +77,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
      */
     public ListenableFuture sendMessage(Message message) throws NotYetConnectedException {
         lock.lock();
+        log.info("PeerSocketHandler.sendMessage called with message: {}", message);
         try {
             if (writeTarget == null)
                 throw new NotYetConnectedException();
@@ -99,6 +100,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
      */
     public void close() {
         lock.lock();
+        log.info("PeerSocketHandler.close called");
         try {
             if (writeTarget == null) {
                 closePending = true;
@@ -112,6 +114,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
 
     @Override
     protected void timeoutOccurred() {
+        log.info("PeerSocketHandler.timeOutOccurred called");
         log.info("{}: Timed out", getAddress());
         close();
     }
@@ -123,6 +126,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
 
     @Override
     public int receiveBytes(ByteBuffer buff) {
+        log.info("PeerSocketHandler.receiveBytes called with buff: {}", buff);
         checkArgument(buff.position() == 0 &&
                 buff.capacity() >= BitcoinSerializer.BitcoinPacketHeader.HEADER_LENGTH + 4);
         try {
