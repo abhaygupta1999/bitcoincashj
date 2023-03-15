@@ -1810,4 +1810,8 @@ public class Transaction extends ChildMessage {
     public void setMemo(String memo) {
         this.memo = memo;
     }
+
+    public boolean isAnyOutputZeroValue() {
+        return outputs.stream().filter(output -> output.getValue().isZero()).count() > 0;
+    }
 }

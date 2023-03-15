@@ -782,6 +782,10 @@ public class Peer extends PeerSocketHandler {
         try {
             //if (log.isDebugEnabled())
                 log.info("{}: Received tx {}", getAddress(), tx.getTxId());
+            if (tx.isAnyOutputZeroValue()) {
+                log.info("Got the zero valued output transaction. So, ignoring this whole transaction");
+                return;
+            }
             // Label the transaction as coming in from the P2P network (as opposed to being created by us, direct import,
             // etc). This helps the wallet decide how to risk analyze it later.
             //
