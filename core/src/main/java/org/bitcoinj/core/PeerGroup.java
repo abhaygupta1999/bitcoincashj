@@ -331,7 +331,7 @@ public class PeerGroup implements TransactionBroadcaster {
     /**
      * The default timeout between when a connection attempt begins and version message exchange completes
      */
-    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 5000;
+    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 30000;
     private volatile int vConnectTimeoutMillis = DEFAULT_CONNECT_TIMEOUT_MILLIS;
 
     /**

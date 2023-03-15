@@ -1810,4 +1810,13 @@ public class Transaction extends ChildMessage {
     public void setMemo(String memo) {
         this.memo = memo;
     }
+
+    public boolean isAnyOutputZeroValue() {
+        for (TransactionOutput output: outputs) {
+            if (output.getValue().isZero()) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

@@ -130,7 +130,7 @@ public class Peer extends PeerSocketHandler {
 
     private final HashSet<Sha256Hash> pendingDsProofDownloads = new HashSet<>();
 
-    private static final int PENDING_TX_DOWNLOADS_LIMIT = 100;
+    private static final int PENDING_TX_DOWNLOADS_LIMIT = 1000;
     // The lowest version number we're willing to accept. Lower than this will result in an immediate disconnect.
     private volatile int vMinProtocolVersion;
 
@@ -786,6 +786,12 @@ public class Peer extends PeerSocketHandler {
             // we can stop holding a reference to the confidence object ourselves. It's up to event listeners on the
             // Peer to stash the tx object somewhere if they want to keep receiving updates about network propagation
             // and so on.
+            if (tx.isAnyOutputZeroValue()) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Got the zero valued output transaction. So, ignoring this whole transaction");
+                }
+                return;
+            }
             TransactionConfidence confidence = tx.getConfidence();
             confidence.setSource(TransactionConfidence.Source.NETWORK);
             pendingTxDownloads.remove(confidence);
