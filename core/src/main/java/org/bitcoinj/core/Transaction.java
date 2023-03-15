@@ -1812,6 +1812,11 @@ public class Transaction extends ChildMessage {
     }
 
     public boolean isAnyOutputZeroValue() {
-        return outputs.stream().filter(output -> output.getValue().isZero()).count() > 0;
+        for (TransactionOutput output: outputs) {
+            if (output.getValue().isZero()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
