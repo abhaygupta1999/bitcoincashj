@@ -130,7 +130,7 @@ public class Peer extends PeerSocketHandler {
 
     private final HashSet<Sha256Hash> pendingDsProofDownloads = new HashSet<>();
 
-    private static final int PENDING_TX_DOWNLOADS_LIMIT = 100;
+    private static final int PENDING_TX_DOWNLOADS_LIMIT = 1000;
     // The lowest version number we're willing to accept. Lower than this will result in an immediate disconnect.
     private volatile int vMinProtocolVersion;
 
@@ -160,7 +160,7 @@ public class Peer extends PeerSocketHandler {
     private long[] lastPingTimes = null;
     private final CopyOnWriteArrayList<PendingPing> pendingPings;
     // Disconnect from a peer that is not responding to Pings
-    private static final int PENDING_PINGS_LIMIT = 50;
+    private static final int PENDING_PINGS_LIMIT = 150;
     private static final int PING_MOVING_AVERAGE_WINDOW = 20;
 
     private volatile VersionMessage vPeerVersionMessage;
