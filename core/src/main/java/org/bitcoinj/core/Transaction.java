@@ -1813,7 +1813,7 @@ public class Transaction extends ChildMessage {
 
     public boolean isAnyOutputZeroValue() {
         for (TransactionOutput output: outputs) {
-            if (output.getValue().isZero()) {
+            if (output.getValue().isZero() || output.getScriptPubKey() == null) {
                 return true;
             }
         }
