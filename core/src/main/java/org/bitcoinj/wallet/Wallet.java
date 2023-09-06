@@ -52,6 +52,7 @@ import javax.annotation.Nullable;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
@@ -5504,7 +5505,7 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    public Map<Sha256Hash, Transaction> cleanUpRelevantSpentTxs(int days) {
+    public Map<Sha256Hash, Transaction> cleanUpRelevantSpentTxs(Instant before) {
         lock.lock();
         try {
             Map<Sha256Hash, Transaction> toCheck = new HashMap<>(spent);
@@ -5523,7 +5524,7 @@ public class Wallet extends BaseTaggableObject
                             break;
                         }
                     }
-                    if (canBeDeleted && isTimeInRange(tx, days)) {
+                    if (canBeDeleted && isTimeInRange(tx, before)) {
                         canBeDeleted = false;
                     }
                     if (canBeDeleted) {
@@ -5563,11 +5564,10 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    private boolean isTimeInRange(Transaction tx, int days) {
+    private boolean isTimeInRange(Transaction tx, Instant before) {
         if (tx.getUpdateTime() != null) {
-            long txTime = tx.getUpdateTime().getTime() / 1000;
-            long currentTime = new Date().getTime() / 1000;
-            return currentTime - txTime < (long) days * 24 * 60 * 60;
+            Instant txInstant = tx.getUpdateTime().toInstant();
+            return txInstant.isAfter(before);
         }
         return true;
     }
